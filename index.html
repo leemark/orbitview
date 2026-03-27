@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrbitView — Real-Time Satellite Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="top-bar">
+      <div class="brand">OrbitView</div>
+      <div id="search-container"></div>
+      <div id="filter-container"></div>
+      <span id="sat-count">— satellites</span>
+      <div id="time-controls-container"></div>
+    </header>
+
+    <main id="map-container">
+      <div id="map"></div>
+    </main>
+
+    <aside id="info-panel" class="hidden" aria-label="Satellite details"></aside>
+
+    <footer id="bottom-bar">
+      <span id="sim-time"></span>
+      <span id="playback-speed"></span>
+      <span id="data-freshness"></span>
+    </footer>
+  </div>
+
+  <div id="tooltip" class="tooltip hidden"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
