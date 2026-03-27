@@ -91,7 +91,7 @@ export function createSatelliteLayer(map, onSelect, onHover) {
 
   canvas = document.createElement('canvas')
   canvas.className = 'satellite-layer'
-  canvas.style.cssText = 'position:absolute;top:0;left:0;z-index:400;'
+  canvas.style.cssText = 'position:absolute;top:0;left:0;z-index:400;pointer-events:auto;'
   map.getContainer().appendChild(canvas)
   ctx = canvas.getContext('2d')
   resize()
