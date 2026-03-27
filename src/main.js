@@ -1,2 +1,4 @@
-// OrbitView — placeholder until Task 7 wires the map
-console.log('OrbitView loading...')
+import { initMap } from './map/mapManager.js'
+
+const map = initMap('map')
+console.log('Map initialized', map)
