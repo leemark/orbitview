@@ -1,5 +1,6 @@
 import { initMap } from './map/mapManager.js'
 import { createSatelliteLayer } from './map/satelliteLayer.js'
+import { renderGroundTrack, clearGroundTrack } from './map/groundTrack.js'
 import { fetchTLEs, getCacheAge } from './data/tleLoader.js'
 import { propagatePosition } from './engine/propagator.js'
 import { Clock } from './engine/clock.js'
@@ -20,6 +21,7 @@ window.orbitview = {
   onDeselect: () => {
     selectedSat = null
     satLayer?.setSelected(null)
+    clearGroundTrack(map)
   }
 }
 
@@ -27,8 +29,10 @@ function handleSelect(sat) {
   selectedSat = sat
   if (sat) {
     showInfoPanel(sat, sat.position)
+    renderGroundTrack(map, sat, clock.getTime())
   } else {
     hideInfoPanel()
+    clearGroundTrack(map)
   }
 }
 
@@ -51,7 +55,12 @@ function animate(now) {
     sat.position = propagatePosition(sat.satrec, simTime)
   }
 
-  if (selectedSat) updateInfoPanel(selectedSat, selectedSat.position)
+  if (selectedSat) {
+    updateInfoPanel(selectedSat, selectedSat.position)
+    if (clock.getSpeed() > 1) {
+      renderGroundTrack(map, selectedSat, simTime)
+    }
+  }
   satLayer?.update(satellites)
   requestAnimationFrame(animate)
 }
