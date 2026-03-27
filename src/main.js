@@ -8,6 +8,7 @@ import { formatTLEAge, formatDate } from './utils/format.js'
 import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js'
 import { createSearchBar, filterSatellites } from './ui/searchBar.js'
 import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
+import { createTimeControls } from './ui/timeControls.js'
 import { CATEGORIES } from './data/categories.js'
 
 const map = initMap('map')
@@ -17,6 +18,7 @@ let satLayer = null
 let selectedSat = null
 let searchQuery = ''
 let searchBar = null
+let timeControls = null
 let activeFilters = { categories: new Set(CATEGORIES), regimes: new Set(['LEO', 'MEO', 'GEO', 'HEO']) }
 
 const satCountEl = document.getElementById('sat-count')
@@ -108,6 +110,11 @@ async function init() {
     createFilterPanel(
       document.getElementById('filter-container'),
       (newFilters) => { activeFilters = newFilters }
+    )
+
+    timeControls = createTimeControls(
+      document.getElementById('time-controls-container'),
+      clock
     )
 
     updateStatus()
