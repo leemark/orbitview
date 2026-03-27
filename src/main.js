@@ -4,15 +4,33 @@ import { fetchTLEs, getCacheAge } from './data/tleLoader.js'
 import { propagatePosition } from './engine/propagator.js'
 import { Clock } from './engine/clock.js'
 import { formatTLEAge, formatDate } from './utils/format.js'
+import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js'
 
 const map = initMap('map')
 const clock = new Clock()
 let satellites = []
 let satLayer = null
+let selectedSat = null
 
 const satCountEl = document.getElementById('sat-count')
 const simTimeEl = document.getElementById('sim-time')
 const freshnessEl = document.getElementById('data-freshness')
+
+window.orbitview = {
+  onDeselect: () => {
+    selectedSat = null
+    satLayer?.setSelected(null)
+  }
+}
+
+function handleSelect(sat) {
+  selectedSat = sat
+  if (sat) {
+    showInfoPanel(sat, sat.position)
+  } else {
+    hideInfoPanel()
+  }
+}
 
 function updateStatus() {
   const visible = satellites.filter(s => s.position).length
@@ -33,6 +51,7 @@ function animate(now) {
     sat.position = propagatePosition(sat.satrec, simTime)
   }
 
+  if (selectedSat) updateInfoPanel(selectedSat, selectedSat.position)
   satLayer?.update(satellites)
   requestAnimationFrame(animate)
 }
@@ -46,7 +65,7 @@ async function init() {
       if (status === 'cache')   satCountEl.textContent = 'Loading from cache…'
     })
 
-    satLayer = createSatelliteLayer(map, null, null)
+    satLayer = createSatelliteLayer(map, handleSelect, null)
     updateStatus()
     clock.play()
     requestAnimationFrame(animate)
