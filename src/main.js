@@ -6,12 +6,15 @@ import { propagatePosition } from './engine/propagator.js'
 import { Clock } from './engine/clock.js'
 import { formatTLEAge, formatDate } from './utils/format.js'
 import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js'
+import { createSearchBar, filterSatellites } from './ui/searchBar.js'
 
 const map = initMap('map')
 const clock = new Clock()
 let satellites = []
 let satLayer = null
 let selectedSat = null
+let searchQuery = ''
+let searchBar = null
 
 const satCountEl = document.getElementById('sat-count')
 const simTimeEl = document.getElementById('sim-time')
@@ -37,8 +40,10 @@ function handleSelect(sat) {
 }
 
 function updateStatus() {
-  const visible = satellites.filter(s => s.position).length
-  satCountEl.textContent = `${visible.toLocaleString()} satellites`
+  const total = satellites.filter(s => s.position).length
+  satCountEl.textContent = searchQuery
+    ? `${filterSatellites(satellites, searchQuery).length} / ${total.toLocaleString()}`
+    : `${total.toLocaleString()} satellites`
   const cacheAge = getCacheAge()
   freshnessEl.textContent = cacheAge ? `TLE data: ${formatTLEAge(cacheAge)}` : ''
 }
@@ -61,7 +66,8 @@ function animate(now) {
       renderGroundTrack(map, selectedSat, simTime)
     }
   }
-  satLayer?.update(satellites)
+  const visible = searchQuery ? filterSatellites(satellites, searchQuery) : satellites
+  satLayer?.update(visible)
   requestAnimationFrame(animate)
 }
 
@@ -87,6 +93,12 @@ async function init() {
         tooltip.classList.add('hidden')
       }
     })
+
+    searchBar = createSearchBar(
+      document.getElementById('search-container'),
+      (query) => { searchQuery = query; updateStatus() }
+    )
+
     updateStatus()
     clock.play()
     requestAnimationFrame(animate)
