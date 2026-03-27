@@ -1,3 +1,4 @@
+import L from 'leaflet'
 import { initMap } from './map/mapManager.js'
 import { createSatelliteLayer } from './map/satelliteLayer.js'
 import { renderGroundTrack, clearGroundTrack } from './map/groundTrack.js'
@@ -10,6 +11,7 @@ import { createSearchBar, filterSatellites } from './ui/searchBar.js'
 import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
 import { createTimeControls } from './ui/timeControls.js'
 import { CATEGORIES } from './data/categories.js'
+import { calculateElevation } from './utils/geo.js'
 
 const map = initMap('map')
 const clock = new Clock()
@@ -20,6 +22,8 @@ let searchQuery = ''
 let searchBar = null
 let timeControls = null
 let activeFilters = { categories: new Set(CATEGORIES), regimes: new Set(['LEO', 'MEO', 'GEO', 'HEO']) }
+let observer = null
+let observerMarker = null
 
 const satCountEl = document.getElementById('sat-count')
 const simTimeEl = document.getElementById('sim-time')
@@ -33,10 +37,33 @@ window.orbitview = {
   }
 }
 
+function setObserver(lat, lon) {
+  observer = { lat, lon }
+  if (observerMarker) observerMarker.remove()
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="observer-dot"></div>',
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  })
+  observerMarker = L.marker([lat, lon], { icon }).addTo(map)
+  observerMarker.bindTooltip('Your location', { permanent: false })
+}
+
+function getObserverData(sat) {
+  if (!observer || !sat.position) return undefined
+  const el = calculateElevation(
+    observer.lat, observer.lon,
+    sat.position.lat, sat.position.lon,
+    sat.position.alt
+  )
+  return el > 0 ? { elevation: el } : null
+}
+
 function handleSelect(sat) {
   selectedSat = sat
   if (sat) {
-    showInfoPanel(sat, sat.position)
+    showInfoPanel(sat, sat.position, getObserverData(sat))
     renderGroundTrack(map, sat, clock.getTime())
   } else {
     hideInfoPanel()
@@ -66,7 +93,7 @@ function animate(now) {
   }
 
   if (selectedSat) {
-    updateInfoPanel(selectedSat, selectedSat.position)
+    updateInfoPanel(selectedSat, selectedSat.position, getObserverData(selectedSat))
     if (clock.getSpeed() > 1) {
       renderGroundTrack(map, selectedSat, simTime)
     }
@@ -145,6 +172,14 @@ async function init() {
         tooltip.classList.add('hidden')
       }
     })
+
+    // Request observer location (silently fails if denied)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setObserver(pos.coords.latitude, pos.coords.longitude),
+        () => {} // permission denied or unavailable — no observer dot
+      )
+    }
 
     searchBar = createSearchBar(
       document.getElementById('search-container'),
