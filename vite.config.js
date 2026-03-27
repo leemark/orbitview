@@ -2,6 +2,15 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   base: '/orbitview/',
+  server: {
+    proxy: {
+      '/celestrak': {
+        target: 'https://celestrak.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/celestrak/, ''),
+      },
+    },
+  },
   ssr: {
     noExternal: [],
   },

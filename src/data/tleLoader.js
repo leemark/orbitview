@@ -4,10 +4,24 @@ import { classifySatellite } from './categories.js'
 export const CACHE_KEY = 'orbitview_tle_v1'
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
 
-const SOURCES = [
-  'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json',
-  'https://api.keeptrack.space/v2/sats',
-]
+// CelesTrak: use smaller group queries instead of GROUP=active (avoids bandwidth limits).
+// In dev, route through Vite proxy to avoid CORS on localhost.
+const CELESTRAK_BASE = import.meta.env.DEV
+  ? '/celestrak/NORAD/elements/gp.php'
+  : 'https://celestrak.org/NORAD/elements/gp.php'
+
+const CELESTRAK_GROUPS = ['stations', 'visual', 'weather', 'gps-ops', 'starlink']
+
+// Normalize TLE API record shape → CelesTrak OMM shape (so parseTLEData handles both)
+function normalizeTLEApiRecord(rec) {
+  return {
+    OBJECT_NAME: rec.name,
+    NORAD_CAT_ID: String(rec.satelliteId),
+    EPOCH: rec.date,
+    TLE_LINE1: rec.line1,
+    TLE_LINE2: rec.line2,
+  }
+}
 
 export function parseTLEData(rawRecords) {
   const results = []
@@ -19,7 +33,6 @@ export function parseTLEData(rawRecords) {
     const satrec = createSatrec(line1.trim(), line2.trim())
     if (satrec.error !== 0) continue
 
-    // Validate that satnum is a valid number (malformed TLEs parse satnum as string)
     const satnum = typeof satrec.satnum === 'number' ? satrec.satnum : parseInt(satrec.satnum, 10)
     if (!Number.isFinite(satnum)) continue
 
@@ -33,6 +46,48 @@ export function parseTLEData(rawRecords) {
     })
   }
   return results
+}
+
+// TLE API — CORS-friendly, no auth. Paginated at 100/page.
+// Fetches numPages pages for an initial load of ~500 satellites.
+async function fetchTLEApi(numPages = 5) {
+  const allRaw = []
+  for (let page = 1; page <= numPages; page++) {
+    const res = await fetch(
+      `https://tle.ivanstanojevic.me/api/tle/?page=${page}&page-size=100`
+    )
+    if (!res.ok) throw new Error(`TLE API HTTP ${res.status}`)
+    const json = await res.json()
+    const members = json.member ?? []
+    allRaw.push(...members.map(normalizeTLEApiRecord))
+    if (members.length < 100) break // reached last page
+  }
+  if (allRaw.length === 0) throw new Error('TLE API returned no records')
+  return allRaw
+}
+
+// CelesTrak — fetch multiple small groups instead of GROUP=active.
+// Deduplicates by NORAD ID across groups.
+async function fetchCelesTrakGroups() {
+  const allRaw = []
+  const seen = new Set()
+  for (const group of CELESTRAK_GROUPS) {
+    try {
+      const res = await fetch(`${CELESTRAK_BASE}?GROUP=${group}&FORMAT=json`)
+      if (!res.ok) continue
+      const data = await res.json()
+      for (const rec of data) {
+        if (!seen.has(rec.NORAD_CAT_ID)) {
+          seen.add(rec.NORAD_CAT_ID)
+          allRaw.push(rec)
+        }
+      }
+    } catch {
+      // skip failed group, try next
+    }
+  }
+  if (allRaw.length === 0) throw new Error('All CelesTrak groups failed')
+  return allRaw
 }
 
 function loadFromCache() {
@@ -55,14 +110,7 @@ function saveToCache(rawRecords) {
   }
 }
 
-async function fetchFromSource(url) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
-
-// Returns parsed satellite array. Throws if all sources fail.
-// onProgress: optional callback called with 'cache' | 'fetching' | 'parsing'
+// Returns parsed satellite array. Throws only if all sources fail.
 export async function fetchTLEs(onProgress) {
   const cached = loadFromCache()
   if (cached) {
@@ -70,19 +118,27 @@ export async function fetchTLEs(onProgress) {
     return parseTLEData(cached)
   }
 
-  let lastError
-  for (const url of SOURCES) {
-    try {
-      onProgress?.('fetching')
-      const raw = await fetchFromSource(url)
-      saveToCache(raw)
-      onProgress?.('parsing')
-      return parseTLEData(raw)
-    } catch (err) {
-      lastError = err
-    }
+  onProgress?.('fetching')
+
+  // Primary: TLE API (CORS-friendly from any origin)
+  try {
+    const raw = await fetchTLEApi()
+    saveToCache(raw)
+    onProgress?.('parsing')
+    return parseTLEData(raw)
+  } catch (err) {
+    console.warn('TLE API failed, trying CelesTrak groups:', err.message)
   }
-  throw new Error(`All TLE sources failed: ${lastError?.message}`)
+
+  // Fallback: CelesTrak small-group queries
+  try {
+    const raw = await fetchCelesTrakGroups()
+    saveToCache(raw)
+    onProgress?.('parsing')
+    return parseTLEData(raw)
+  } catch (err) {
+    throw new Error(`All TLE sources failed: ${err.message}`)
+  }
 }
 
 export function getCacheAge() {
