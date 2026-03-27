@@ -74,7 +74,19 @@ async function init() {
       if (status === 'cache')   satCountEl.textContent = 'Loading from cache…'
     })
 
-    satLayer = createSatelliteLayer(map, handleSelect, null)
+    const tooltip = document.getElementById('tooltip')
+
+    satLayer = createSatelliteLayer(map, handleSelect, (sat, clientX, clientY) => {
+      if (sat) {
+        const alt = sat.position ? ` · ${sat.position.alt.toFixed(0)} km` : ''
+        tooltip.textContent = `${sat.name}${alt}`
+        tooltip.style.left = `${clientX + 14}px`
+        tooltip.style.top  = `${clientY - 8}px`
+        tooltip.classList.remove('hidden')
+      } else {
+        tooltip.classList.add('hidden')
+      }
+    })
     updateStatus()
     clock.play()
     requestAnimationFrame(animate)
