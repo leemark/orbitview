@@ -7,6 +7,8 @@ import { Clock } from './engine/clock.js'
 import { formatTLEAge, formatDate } from './utils/format.js'
 import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js'
 import { createSearchBar, filterSatellites } from './ui/searchBar.js'
+import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
+import { CATEGORIES } from './data/categories.js'
 
 const map = initMap('map')
 const clock = new Clock()
@@ -15,6 +17,7 @@ let satLayer = null
 let selectedSat = null
 let searchQuery = ''
 let searchBar = null
+let activeFilters = { categories: new Set(CATEGORIES), regimes: new Set(['LEO', 'MEO', 'GEO', 'HEO']) }
 
 const satCountEl = document.getElementById('sat-count')
 const simTimeEl = document.getElementById('sim-time')
@@ -66,8 +69,11 @@ function animate(now) {
       renderGroundTrack(map, selectedSat, simTime)
     }
   }
-  const visible = searchQuery ? filterSatellites(satellites, searchQuery) : satellites
-  satLayer?.update(visible)
+  const filtered = applyFilters(
+    searchQuery ? filterSatellites(satellites, searchQuery) : satellites,
+    activeFilters
+  )
+  satLayer?.update(filtered)
   requestAnimationFrame(animate)
 }
 
@@ -97,6 +103,11 @@ async function init() {
     searchBar = createSearchBar(
       document.getElementById('search-container'),
       (query) => { searchQuery = query; updateStatus() }
+    )
+
+    createFilterPanel(
+      document.getElementById('filter-container'),
+      (newFilters) => { activeFilters = newFilters }
     )
 
     updateStatus()
