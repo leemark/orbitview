@@ -79,6 +79,50 @@ function animate(now) {
   requestAnimationFrame(animate)
 }
 
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return
+
+    const speeds = [1, 10, 100, 1000]
+
+    switch (e.key) {
+      case ' ':
+        e.preventDefault()
+        if (clock.isPaused()) clock.play()
+        else clock.pause()
+        timeControls?.syncPlayPause()
+        break
+      case '+':
+      case '=': {
+        const idx = speeds.indexOf(clock.getSpeed())
+        if (idx < speeds.length - 1) {
+          clock.setSpeed(speeds[idx + 1])
+          document.getElementById('playback-speed').textContent = `${speeds[idx + 1]}×`
+        }
+        break
+      }
+      case '-': {
+        const idx = speeds.indexOf(clock.getSpeed())
+        if (idx > 0) {
+          clock.setSpeed(speeds[idx - 1])
+          document.getElementById('playback-speed').textContent = `${speeds[idx - 1]}×`
+        }
+        break
+      }
+      case 'Escape':
+        selectedSat = null
+        satLayer?.setSelected(null)
+        hideInfoPanel()
+        clearGroundTrack(map)
+        break
+      case '/':
+        e.preventDefault()
+        searchBar?.focus()
+        break
+    }
+  })
+}
+
 async function init() {
   satCountEl.textContent = 'Loading TLEs…'
   try {
@@ -119,6 +163,7 @@ async function init() {
 
     updateStatus()
     clock.play()
+    setupKeyboardShortcuts()
     requestAnimationFrame(animate)
   } catch (err) {
     satCountEl.textContent = 'Failed to load TLEs'
