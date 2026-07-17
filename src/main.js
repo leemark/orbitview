@@ -11,6 +11,7 @@ import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js
 import { createSearchBar, filterSatellites } from './ui/searchBar.js'
 import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
 import { createTimeControls } from './ui/timeControls.js'
+import { getSatelliteStatus } from './ui/status.js'
 import { CATEGORIES } from './data/categories.js'
 import { calculateElevation } from './utils/geo.js'
 
@@ -79,10 +80,8 @@ function handleSelect(sat) {
 }
 
 function updateStatus() {
-  const total = satellites.filter(s => s.position).length
-  satCountEl.textContent = searchQuery
-    ? `${filterSatellites(satellites, searchQuery).length} / ${total.toLocaleString()}`
-    : `${total.toLocaleString()} satellites`
+  const { label } = getSatelliteStatus(satellites, searchQuery, activeFilters)
+  if (satCountEl.textContent !== label) satCountEl.textContent = label
   const cacheAge = getCacheAge()
   freshnessEl.textContent = cacheAge ? `TLE data: ${formatTLEAge(cacheAge)}` : ''
 }
@@ -104,6 +103,7 @@ function animate(now) {
       sat.position = propagatePosition(sat.satrec, simTime)
     }
     lastPropagatedSimTime = simTimestamp
+    updateStatus()
   }
 
   if (selectedSat) {
@@ -207,7 +207,10 @@ async function init() {
 
     createFilterPanel(
       document.getElementById('filter-container'),
-      (newFilters) => { activeFilters = newFilters }
+      (newFilters) => {
+        activeFilters = newFilters
+        updateStatus()
+      }
     )
 
     timeControls = createTimeControls(
@@ -215,7 +218,6 @@ async function init() {
       clock
     )
 
-    updateStatus()
     clock.play()
     setupKeyboardShortcuts()
     requestAnimationFrame(animate)
