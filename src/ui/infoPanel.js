@@ -25,7 +25,7 @@ export function showInfoPanel(sat, position, observerData) {
 
   panel.innerHTML = `
     <div class="info-header">
-      <h2 class="sat-name">${sat.name}</h2>
+      <h2 class="sat-name"></h2>
       <button id="close-panel" aria-label="Close panel">✕</button>
     </div>
     <div class="info-section">
@@ -69,6 +69,8 @@ export function showInfoPanel(sat, position, observerData) {
       </div>
     </div>
   `
+
+  panel.querySelector('.sat-name').textContent = sat.name
 
   document.getElementById('close-panel')?.addEventListener('click', () => {
     hideInfoPanel()
