@@ -1,9 +1,11 @@
 import L from 'leaflet'
 import { CATEGORY_COLORS } from '../data/categories.js'
+import { getWrappedXPositions } from './worldWrap.js'
 
 const DOT_RADIUS = 2.5
 const SELECTED_RING_RADIUS = 6
 const HIT_RADIUS = 8 // px for click/hover detection
+const RENDER_MARGIN = 10
 
 export function createSatelliteLayer(map, onSelect, onHover) {
   let satellites = []
@@ -22,48 +24,74 @@ export function createSatelliteLayer(map, onSelect, onHover) {
     return { x: point.x, y: point.y }
   }
 
+  function getWorldWidth() {
+    return map.getPixelWorldBounds(map.getZoom())?.getSize().x ?? 0
+  }
+
+  function drawSatellite(x, y, color, isSelected, isHovered) {
+    if (isSelected) {
+      ctx.beginPath()
+      ctx.arc(x, y, SELECTED_RING_RADIUS, 0, 2 * Math.PI)
+      ctx.strokeStyle = color
+      ctx.lineWidth = 1.5
+      ctx.stroke()
+    }
+
+    ctx.beginPath()
+    ctx.arc(x, y, isHovered ? DOT_RADIUS + 1 : DOT_RADIUS, 0, 2 * Math.PI)
+    ctx.fillStyle = color
+    ctx.globalAlpha = isHovered || isSelected ? 1 : 0.8
+    ctx.fill()
+    ctx.globalAlpha = 1
+  }
+
   function render() {
     if (!ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const worldWidth = getWorldWidth()
 
     for (const sat of satellites) {
       if (!sat.position) continue
-      const { x, y } = projectToCanvas(sat.position.lat, sat.position.lon)
-
-      if (x < -10 || x > canvas.width + 10 || y < -10 || y > canvas.height + 10) continue
+      const { x: baseX, y } = projectToCanvas(sat.position.lat, sat.position.lon)
+      if (y < -RENDER_MARGIN || y > canvas.height + RENDER_MARGIN) continue
 
       const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS.other
       const isSelected = sat.noradId === selectedId
       const isHovered = sat.noradId === hoveredId
+      const wrappedXs = getWrappedXPositions(
+        baseX,
+        worldWidth,
+        canvas.width,
+        RENDER_MARGIN
+      )
 
-      if (isSelected) {
-        ctx.beginPath()
-        ctx.arc(x, y, SELECTED_RING_RADIUS, 0, 2 * Math.PI)
-        ctx.strokeStyle = color
-        ctx.lineWidth = 1.5
-        ctx.stroke()
+      for (const x of wrappedXs) {
+        drawSatellite(x, y, color, isSelected, isHovered)
       }
-
-      ctx.beginPath()
-      ctx.arc(x, y, isHovered ? DOT_RADIUS + 1 : DOT_RADIUS, 0, 2 * Math.PI)
-      ctx.fillStyle = color
-      ctx.globalAlpha = isHovered || isSelected ? 1 : 0.8
-      ctx.fill()
-      ctx.globalAlpha = 1
     }
   }
 
   function findSatAt(canvasX, canvasY) {
     let closest = null
     let closestDist = HIT_RADIUS
+    const worldWidth = getWorldWidth()
 
     for (const sat of satellites) {
       if (!sat.position) continue
-      const { x, y } = projectToCanvas(sat.position.lat, sat.position.lon)
-      const dist = Math.hypot(x - canvasX, y - canvasY)
-      if (dist < closestDist) {
-        closest = sat
-        closestDist = dist
+      const { x: baseX, y } = projectToCanvas(sat.position.lat, sat.position.lon)
+      const wrappedXs = getWrappedXPositions(
+        baseX,
+        worldWidth,
+        canvas.width,
+        HIT_RADIUS
+      )
+
+      for (const x of wrappedXs) {
+        const dist = Math.hypot(x - canvasX, y - canvasY)
+        if (dist < closestDist) {
+          closest = sat
+          closestDist = dist
+        }
       }
     }
     return closest
