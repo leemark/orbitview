@@ -75,8 +75,11 @@ src/
 
 ## Getting Started
 
+Requires Node.js `20.19+`, `22.13+`, or `24+`, matching the supported
+runtime ranges in `package.json`.
+
 ```bash
-npm install
+npm ci
 npm run dev       # Dev server at http://localhost:5173
 npm test          # Run unit tests
 npm run build     # Production build → dist/
