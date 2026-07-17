@@ -5,19 +5,24 @@ import { renderGroundTrack, clearGroundTrack } from './map/groundTrack.js'
 import { fetchTLEs, getCacheAge } from './data/tleLoader.js'
 import { propagatePosition } from './engine/propagator.js'
 import { Clock } from './engine/clock.js'
+import { IntervalScheduler } from './engine/updateScheduler.js'
 import { formatTLEAge, formatDate } from './utils/format.js'
 import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js'
 import { createSearchBar, filterSatellites } from './ui/searchBar.js'
 import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
 import { createTimeControls } from './ui/timeControls.js'
+import { getSatelliteStatus } from './ui/status.js'
 import { CATEGORIES } from './data/categories.js'
 import { calculateElevation } from './utils/geo.js'
 
 const map = initMap('map')
 const clock = new Clock()
+const positionUpdateScheduler = new IntervalScheduler(100)
+const groundTrackUpdateScheduler = new IntervalScheduler(250)
 let satellites = []
 let satLayer = null
 let selectedSat = null
+let lastPropagatedSimTime = null
 let searchQuery = ''
 let searchBar = null
 let timeControls = null
@@ -34,6 +39,7 @@ window.orbitview = {
     selectedSat = null
     satLayer?.setSelected(null)
     clearGroundTrack(map)
+    groundTrackUpdateScheduler.reset()
   }
 }
 
@@ -65,17 +71,17 @@ function handleSelect(sat) {
   if (sat) {
     showInfoPanel(sat, sat.position, getObserverData(sat))
     renderGroundTrack(map, sat, clock.getTime())
+    groundTrackUpdateScheduler.mark(performance.now())
   } else {
     hideInfoPanel()
     clearGroundTrack(map)
+    groundTrackUpdateScheduler.reset()
   }
 }
 
 function updateStatus() {
-  const total = satellites.filter(s => s.position).length
-  satCountEl.textContent = searchQuery
-    ? `${filterSatellites(satellites, searchQuery).length} / ${total.toLocaleString()}`
-    : `${total.toLocaleString()} satellites`
+  const { label } = getSatelliteStatus(satellites, searchQuery, activeFilters)
+  if (satCountEl.textContent !== label) satCountEl.textContent = label
   const cacheAge = getCacheAge()
   freshnessEl.textContent = cacheAge ? `TLE data: ${formatTLEAge(cacheAge)}` : ''
 }
@@ -88,13 +94,25 @@ function animate(now) {
   const simTime = clock.tick(delta)
   simTimeEl.textContent = formatDate(simTime)
 
-  for (const sat of satellites) {
-    sat.position = propagatePosition(sat.satrec, simTime)
+  const simTimestamp = simTime.getTime()
+  if (
+    simTimestamp !== lastPropagatedSimTime &&
+    positionUpdateScheduler.shouldRun(now)
+  ) {
+    for (const sat of satellites) {
+      sat.position = propagatePosition(sat.satrec, simTime)
+    }
+    lastPropagatedSimTime = simTimestamp
+    updateStatus()
   }
 
   if (selectedSat) {
     updateInfoPanel(selectedSat, selectedSat.position, getObserverData(selectedSat))
-    if (clock.getSpeed() > 1) {
+    if (
+      !clock.isPaused() &&
+      clock.getSpeed() > 1 &&
+      groundTrackUpdateScheduler.shouldRun(now)
+    ) {
       renderGroundTrack(map, selectedSat, simTime)
     }
   }
@@ -141,6 +159,7 @@ function setupKeyboardShortcuts() {
         satLayer?.setSelected(null)
         hideInfoPanel()
         clearGroundTrack(map)
+        groundTrackUpdateScheduler.reset()
         break
       case '/':
         e.preventDefault()
@@ -188,7 +207,10 @@ async function init() {
 
     createFilterPanel(
       document.getElementById('filter-container'),
-      (newFilters) => { activeFilters = newFilters }
+      (newFilters) => {
+        activeFilters = newFilters
+        updateStatus()
+      }
     )
 
     timeControls = createTimeControls(
@@ -196,7 +218,6 @@ async function init() {
       clock
     )
 
-    updateStatus()
     clock.play()
     setupKeyboardShortcuts()
     requestAnimationFrame(animate)
