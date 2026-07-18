@@ -4,6 +4,10 @@ export function createSatrec(tleLine1, tleLine2) {
   return satellite.twoline2satrec(tleLine1, tleLine2)
 }
 
+export function createSatrecFromOmm(ommRecord) {
+  return satellite.json2satrec(ommRecord)
+}
+
 // Returns { lat, lon, alt, velocity } or null if propagation fails.
 // lat/lon in degrees, alt in km, velocity in km/s.
 export function propagatePosition(satrec, date) {
