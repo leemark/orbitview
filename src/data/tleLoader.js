@@ -1,5 +1,6 @@
 import { createSatrec, createSatrecFromOmm } from '../engine/propagator.js'
 import { classifySatellite } from './categories.js'
+import { DEFAULT_CATALOG_ID, getCatalog } from './catalogs.js'
 
 export const CACHE_KEY = 'orbitview_orbital_data_v2'
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
@@ -11,7 +12,6 @@ const CELESTRAK_BASE = import.meta.env.DEV
   ? '/celestrak/NORAD/elements/gp.php'
   : 'https://celestrak.org/NORAD/elements/gp.php'
 
-const CELESTRAK_GROUPS = ['stations', 'visual', 'weather', 'gps-ops', 'starlink']
 const OMM_REQUIRED_NUMERIC_FIELDS = [
   'NORAD_CAT_ID',
   'MEAN_MOTION',
@@ -72,6 +72,7 @@ export function parseTLEData(rawRecords, metadata = {}) {
       category: classifySatellite({ name: rec.OBJECT_NAME, noradId }),
       elementFormat: format,
       dataSource: metadata.source ?? 'Unknown',
+      catalogLabel: metadata.catalogLabel ?? 'Unknown',
     })
   }
   return results
@@ -105,10 +106,10 @@ async function fetchTLEApi(numPages = 5) {
 
 // CelesTrak — fetch multiple small groups instead of GROUP=active.
 // Deduplicates by NORAD ID across groups.
-async function fetchCelesTrakGroups() {
+async function fetchCelesTrakGroups(groups, limit = Infinity) {
   const allRaw = []
   const seen = new Set()
-  for (const group of CELESTRAK_GROUPS) {
+  for (const group of groups) {
     try {
       const res = await fetch(`${CELESTRAK_BASE}?GROUP=${group}&FORMAT=json`)
       if (!res.ok) continue
@@ -117,6 +118,7 @@ async function fetchCelesTrakGroups() {
         if (!seen.has(rec.NORAD_CAT_ID)) {
           seen.add(rec.NORAD_CAT_ID)
           allRaw.push(rec)
+          if (allRaw.length >= limit) return allRaw
         }
       }
     } catch {
@@ -127,9 +129,13 @@ async function fetchCelesTrakGroups() {
   return allRaw
 }
 
-function loadFromCache() {
+function getCatalogCacheKey(catalogId) {
+  return `${CACHE_KEY}_${catalogId}`
+}
+
+function loadFromCache(catalogId) {
   try {
-    const raw = localStorage.getItem(CACHE_KEY)
+    const raw = localStorage.getItem(getCatalogCacheKey(catalogId))
     if (!raw) return null
     const { data, timestamp, metadata = {} } = JSON.parse(raw)
     if (Date.now() - timestamp > CACHE_TTL_MS) return null
@@ -139,9 +145,9 @@ function loadFromCache() {
   }
 }
 
-function saveToCache(rawRecords, metadata) {
+function saveToCache(catalogId, rawRecords, metadata) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
+    localStorage.setItem(getCatalogCacheKey(catalogId), JSON.stringify({
       data: rawRecords,
       metadata,
       timestamp: Date.now(),
@@ -152,12 +158,17 @@ function saveToCache(rawRecords, metadata) {
 }
 
 // Returns parsed satellite array. Throws only if all sources fail.
-export async function fetchTLEs(onProgress) {
-  const cached = loadFromCache()
+export async function fetchTLEs(onProgress, catalogId = DEFAULT_CATALOG_ID) {
+  const catalog = getCatalog(catalogId)
+  if (!catalog) throw new Error(`Unknown satellite catalog: ${catalogId}`)
+
+  const cached = loadFromCache(catalogId)
   if (cached) {
     currentFeedStatus = {
       checkedAt: new Date(cached.timestamp),
       source: cached.metadata.source ?? 'Unknown',
+      catalogLabel: cached.metadata.catalogLabel ?? catalog.label,
+      coverage: cached.metadata.coverage ?? catalog.description,
     }
     onProgress?.('cache')
     return parseOrThrow(cached.data, cached.metadata)
@@ -165,26 +176,39 @@ export async function fetchTLEs(onProgress) {
 
   onProgress?.('fetching')
 
-  // Primary: TLE API (CORS-friendly from any origin)
+  // Primary: the explicitly selected CelesTrak OMM catalog.
   try {
-    const raw = await fetchTLEApi()
-    const metadata = { source: 'TLE API' }
+    const raw = await fetchCelesTrakGroups(catalog.groups, catalog.limit)
+    const metadata = {
+      source: 'CelesTrak',
+      catalogId,
+      catalogLabel: catalog.label,
+      coverage: catalog.description,
+    }
     const parsed = parseOrThrow(raw, metadata)
-    saveToCache(raw, metadata)
-    currentFeedStatus = { checkedAt: new Date(), source: metadata.source }
+    saveToCache(catalogId, raw, metadata)
+    currentFeedStatus = { checkedAt: new Date(), ...metadata }
     onProgress?.('parsing')
     return parsed
   } catch (err) {
-    console.warn('TLE API failed, trying CelesTrak groups:', err.message)
+    if (catalogId !== DEFAULT_CATALOG_ID) {
+      throw new Error(`${catalog.label} catalog failed: ${err.message}`)
+    }
+    console.warn('CelesTrak overview failed, trying the TLE API sample:', err.message)
   }
 
-  // Fallback: CelesTrak small-group queries
+  // Overview fallback: a bounded sample from the CORS-friendly TLE API.
   try {
-    const raw = await fetchCelesTrakGroups()
-    const metadata = { source: 'CelesTrak' }
+    const raw = await fetchTLEApi()
+    const metadata = {
+      source: 'TLE API',
+      catalogId,
+      catalogLabel: 'Overview fallback sample',
+      coverage: 'Up to 500 records from the TLE API',
+    }
     const parsed = parseOrThrow(raw, metadata)
-    saveToCache(raw, metadata)
-    currentFeedStatus = { checkedAt: new Date(), source: metadata.source }
+    saveToCache(catalogId, raw, metadata)
+    currentFeedStatus = { checkedAt: new Date(), ...metadata }
     onProgress?.('parsing')
     return parsed
   } catch (err) {
@@ -195,12 +219,15 @@ export async function fetchTLEs(onProgress) {
 export function getFeedStatus() {
   if (currentFeedStatus) return currentFeedStatus
   try {
-    const raw = localStorage.getItem(CACHE_KEY)
+    const catalogKey = getCatalogCacheKey(DEFAULT_CATALOG_ID)
+    const raw = localStorage.getItem(catalogKey)
     if (!raw) return null
     const { timestamp, metadata = {} } = JSON.parse(raw)
     return {
       checkedAt: new Date(timestamp),
       source: metadata.source ?? 'Unknown',
+      catalogLabel: metadata.catalogLabel ?? 'Overview',
+      coverage: metadata.coverage ?? '',
     }
   } catch {
     return null

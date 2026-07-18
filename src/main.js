@@ -13,7 +13,9 @@ import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
 import { createTimeControls } from './ui/timeControls.js'
 import { getSatelliteStatus } from './ui/status.js'
 import { CATEGORIES } from './data/categories.js'
+import { DEFAULT_CATALOG_ID } from './data/catalogs.js'
 import { calculateLookAngles } from './utils/geo.js'
+import { createCatalogSelector } from './ui/catalogSelector.js'
 
 const map = initMap('map')
 const clock = new Clock()
@@ -29,6 +31,7 @@ let timeControls = null
 let activeFilters = { categories: new Set(CATEGORIES), regimes: new Set(['LEO', 'MEO', 'GEO', 'HEO']) }
 let observer = null
 let observerMarker = null
+let catalogSelector = null
 
 const satCountEl = document.getElementById('sat-count')
 const simTimeEl = document.getElementById('sim-time')
@@ -93,6 +96,39 @@ function updateStatus() {
     `elements median ${formatTLEAge(elementAges.medianEpoch)}, ` +
     `oldest ${formatTLEAge(elementAges.oldestEpoch)}`
   freshnessEl.title = `Orbital elements from ${feedStatus.source}`
+  satCountEl.title = `${feedStatus.catalogLabel}: ${feedStatus.coverage}`
+}
+
+function setLoadingStatus(status) {
+  if (status === 'fetching') satCountEl.textContent = 'Fetching orbital elements…'
+  if (status === 'parsing') satCountEl.textContent = 'Parsing orbital elements…'
+  if (status === 'cache') satCountEl.textContent = 'Loading catalog from cache…'
+}
+
+async function loadCatalog(catalogId) {
+  const previousSatellites = satellites
+  selectedSat = null
+  hideInfoPanel()
+  clearGroundTrack(map)
+  groundTrackUpdateScheduler.reset()
+  satellites = []
+  satLayer?.setSelected(null)
+  satLayer?.update([])
+  updateStatus()
+
+  try {
+    const loadedSatellites = await fetchTLEs(setLoadingStatus, catalogId)
+    satellites = loadedSatellites
+    lastPropagatedSimTime = null
+    positionUpdateScheduler.reset()
+    updateStatus()
+  } catch (err) {
+    satellites = previousSatellites
+    lastPropagatedSimTime = null
+    updateStatus()
+    console.error(err)
+    throw err
+  }
 }
 
 let lastRaf = performance.now()
@@ -181,11 +217,7 @@ function setupKeyboardShortcuts() {
 async function init() {
   satCountEl.textContent = 'Loading TLEs…'
   try {
-    satellites = await fetchTLEs((status) => {
-      if (status === 'fetching') satCountEl.textContent = 'Fetching TLEs…'
-      if (status === 'parsing') satCountEl.textContent = 'Parsing…'
-      if (status === 'cache')   satCountEl.textContent = 'Loading from cache…'
-    })
+    satellites = await fetchTLEs(setLoadingStatus, DEFAULT_CATALOG_ID)
 
     const tooltip = document.getElementById('tooltip')
 
@@ -200,6 +232,11 @@ async function init() {
         tooltip.classList.add('hidden')
       }
     })
+
+    catalogSelector = createCatalogSelector(
+      document.getElementById('catalog-container'),
+      loadCatalog
+    )
 
     // Request observer location (silently fails if denied)
     if (navigator.geolocation) {
