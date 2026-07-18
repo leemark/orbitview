@@ -13,7 +13,7 @@ import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
 import { createTimeControls } from './ui/timeControls.js'
 import { getSatelliteStatus } from './ui/status.js'
 import { CATEGORIES } from './data/categories.js'
-import { calculateElevation } from './utils/geo.js'
+import { calculateLookAngles } from './utils/geo.js'
 
 const map = initMap('map')
 const clock = new Clock()
@@ -58,12 +58,12 @@ function setObserver(lat, lon) {
 
 function getObserverData(sat) {
   if (!observer || !sat.position) return undefined
-  const el = calculateElevation(
+  const lookAngles = calculateLookAngles(
     observer.lat, observer.lon,
     sat.position.lat, sat.position.lon,
     sat.position.alt
   )
-  return el > 0 ? { elevation: el } : null
+  return lookAngles.elevation > 0 ? lookAngles : null
 }
 
 function handleSelect(sat) {

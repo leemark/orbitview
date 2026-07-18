@@ -52,13 +52,14 @@ describe('showInfoPanel', () => {
     updateInfoPanel(
       sat,
       { lat: 12.34, lon: -45.67, alt: 410, velocity: 7.65 },
-      { elevation: 25.5 }
+      { elevation: 25.5, azimuth: 123.4, range: 987.6 }
     )
 
     expect(panel.querySelector('#close-panel')).toBe(closeButton)
     expect(document.activeElement).toBe(closeButton)
     expect(panel.querySelector('[data-field="latitude"]').textContent).toBe('12.34°N')
-    expect(panel.querySelector('[data-field="visibility"]').textContent).toBe('✓ Visible (25.5°)')
+    expect(panel.querySelector('[data-field="visibility"]').textContent)
+      .toBe('✓ El 25.5° · Az 123.4° · 988 km')
   })
 
   it('binds the close action once per panel lifecycle', async () => {

@@ -110,7 +110,8 @@ function updatePanel(sat, position, observerData) {
     setText(
       panelRefs.visibility,
       isVisible
-        ? `✓ Visible (${observerData.elevation.toFixed(1)}°)`
+        ? `✓ El ${observerData.elevation.toFixed(1)}° · ` +
+          `Az ${observerData.azimuth.toFixed(1)}° · ${observerData.range.toFixed(0)} km`
         : 'Below horizon'
     )
     panelRefs.visibility.className = `value ${isVisible ? 'vis-yes' : 'vis-no'}`
