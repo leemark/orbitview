@@ -2,11 +2,11 @@ import L from 'leaflet'
 import { initMap } from './map/mapManager.js'
 import { createSatelliteLayer } from './map/satelliteLayer.js'
 import { renderGroundTrack, clearGroundTrack } from './map/groundTrack.js'
-import { fetchTLEs, getCacheAge } from './data/tleLoader.js'
+import { fetchTLEs, getFeedStatus, summarizeElementAges } from './data/tleLoader.js'
 import { propagatePosition } from './engine/propagator.js'
 import { Clock } from './engine/clock.js'
 import { IntervalScheduler } from './engine/updateScheduler.js'
-import { formatTLEAge, formatDate } from './utils/format.js'
+import { formatTLEAge, formatElapsedTime, formatDate } from './utils/format.js'
 import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js'
 import { createSearchBar, filterSatellites } from './ui/searchBar.js'
 import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
@@ -82,8 +82,17 @@ function handleSelect(sat) {
 function updateStatus() {
   const { label } = getSatelliteStatus(satellites, searchQuery, activeFilters)
   if (satCountEl.textContent !== label) satCountEl.textContent = label
-  const cacheAge = getCacheAge()
-  freshnessEl.textContent = cacheAge ? `TLE data: ${formatTLEAge(cacheAge)}` : ''
+  const feedStatus = getFeedStatus()
+  const elementAges = summarizeElementAges(satellites)
+  if (!feedStatus || !elementAges) {
+    freshnessEl.textContent = ''
+    return
+  }
+  freshnessEl.textContent =
+    `Feed checked ${formatElapsedTime(feedStatus.checkedAt)} · ` +
+    `elements median ${formatTLEAge(elementAges.medianEpoch)}, ` +
+    `oldest ${formatTLEAge(elementAges.oldestEpoch)}`
+  freshnessEl.title = `Orbital elements from ${feedStatus.source}`
 }
 
 let lastRaf = performance.now()

@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { parseTLEData, CACHE_KEY } from '../../src/data/tleLoader.js'
+import {
+  parseTLEData,
+  summarizeElementAges,
+  CACHE_KEY,
+} from '../../src/data/tleLoader.js'
 
 const SAMPLE_TLE = [
   {
@@ -77,5 +81,22 @@ describe('CACHE_KEY', () => {
   it('is a non-empty string', () => {
     expect(typeof CACHE_KEY).toBe('string')
     expect(CACHE_KEY.length).toBeGreaterThan(0)
+  })
+})
+
+describe('summarizeElementAges', () => {
+  it('reports the median and oldest element epochs separately', () => {
+    const result = summarizeElementAges([
+      { epoch: new Date('2026-03-24T03:00:00Z') },
+      { epoch: new Date('2026-03-24T01:00:00Z') },
+      { epoch: new Date('2026-03-24T02:00:00Z') },
+    ])
+
+    expect(result.medianEpoch.toISOString()).toBe('2026-03-24T02:00:00.000Z')
+    expect(result.oldestEpoch.toISOString()).toBe('2026-03-24T01:00:00.000Z')
+  })
+
+  it('returns null when no valid element epochs are available', () => {
+    expect(summarizeElementAges([])).toBeNull()
   })
 })

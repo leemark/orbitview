@@ -3,6 +3,7 @@ import { classifySatellite } from './categories.js'
 
 export const CACHE_KEY = 'orbitview_orbital_data_v2'
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
+let currentFeedStatus = null
 
 // CelesTrak: use smaller group queries instead of GROUP=active (avoids bandwidth limits).
 // In dev, route through Vite proxy to avoid CORS on localhost.
@@ -132,7 +133,7 @@ function loadFromCache() {
     if (!raw) return null
     const { data, timestamp, metadata = {} } = JSON.parse(raw)
     if (Date.now() - timestamp > CACHE_TTL_MS) return null
-    return { data, metadata }
+    return { data, metadata, timestamp }
   } catch {
     return null
   }
@@ -154,6 +155,10 @@ function saveToCache(rawRecords, metadata) {
 export async function fetchTLEs(onProgress) {
   const cached = loadFromCache()
   if (cached) {
+    currentFeedStatus = {
+      checkedAt: new Date(cached.timestamp),
+      source: cached.metadata.source ?? 'Unknown',
+    }
     onProgress?.('cache')
     return parseOrThrow(cached.data, cached.metadata)
   }
@@ -166,6 +171,7 @@ export async function fetchTLEs(onProgress) {
     const metadata = { source: 'TLE API' }
     const parsed = parseOrThrow(raw, metadata)
     saveToCache(raw, metadata)
+    currentFeedStatus = { checkedAt: new Date(), source: metadata.source }
     onProgress?.('parsing')
     return parsed
   } catch (err) {
@@ -178,6 +184,7 @@ export async function fetchTLEs(onProgress) {
     const metadata = { source: 'CelesTrak' }
     const parsed = parseOrThrow(raw, metadata)
     saveToCache(raw, metadata)
+    currentFeedStatus = { checkedAt: new Date(), source: metadata.source }
     onProgress?.('parsing')
     return parsed
   } catch (err) {
@@ -185,13 +192,35 @@ export async function fetchTLEs(onProgress) {
   }
 }
 
-export function getCacheAge() {
+export function getFeedStatus() {
+  if (currentFeedStatus) return currentFeedStatus
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
-    const { timestamp } = JSON.parse(raw)
-    return new Date(timestamp)
+    const { timestamp, metadata = {} } = JSON.parse(raw)
+    return {
+      checkedAt: new Date(timestamp),
+      source: metadata.source ?? 'Unknown',
+    }
   } catch {
     return null
+  }
+}
+
+export function summarizeElementAges(satellites) {
+  const epochs = satellites
+    .map(sat => sat.epoch?.getTime())
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+
+  if (epochs.length === 0) return null
+  const middle = Math.floor(epochs.length / 2)
+  const medianTimestamp = epochs.length % 2
+    ? epochs[middle]
+    : (epochs[middle - 1] + epochs[middle]) / 2
+
+  return {
+    medianEpoch: new Date(medianTimestamp),
+    oldestEpoch: new Date(epochs[0]),
   }
 }
