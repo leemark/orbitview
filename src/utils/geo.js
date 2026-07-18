@@ -1,3 +1,5 @@
+import * as satellite from 'satellite.js'
+
 const EARTH_RADIUS_KM = 6371
 
 export function toRadians(deg) {
@@ -17,16 +19,36 @@ export function haversineDistance(lat1, lon1, lat2, lon2) {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(a))
 }
 
-// Returns elevation angle in degrees from observer to satellite.
+// Returns WGS-84 look angles from an observer to a satellite subpoint.
 // observerLat/Lon in degrees, satLat/Lon in degrees, satAlt in km.
+export function calculateLookAngles(
+  observerLat,
+  observerLon,
+  satLat,
+  satLon,
+  satAlt,
+  observerAlt = 0
+) {
+  const observerGeodetic = {
+    latitude: satellite.degreesToRadians(observerLat),
+    longitude: satellite.degreesToRadians(observerLon),
+    height: observerAlt,
+  }
+  const satelliteEcf = satellite.geodeticToEcf({
+    latitude: satellite.degreesToRadians(satLat),
+    longitude: satellite.degreesToRadians(satLon),
+    height: satAlt,
+  })
+  const lookAngles = satellite.ecfToLookAngles(observerGeodetic, satelliteEcf)
+  const azimuth = satellite.radiansToDegrees(lookAngles.azimuth)
+
+  return {
+    azimuth: (azimuth + 360) % 360,
+    elevation: satellite.radiansToDegrees(lookAngles.elevation),
+    range: lookAngles.rangeSat,
+  }
+}
+
 export function calculateElevation(observerLat, observerLon, satLat, satLon, satAlt) {
-  const d = haversineDistance(observerLat, observerLon, satLat, satLon)
-  const earthAngle = d / EARTH_RADIUS_KM
-  const slant = Math.sqrt(
-    EARTH_RADIUS_KM ** 2 + (EARTH_RADIUS_KM + satAlt) ** 2 -
-    2 * EARTH_RADIUS_KM * (EARTH_RADIUS_KM + satAlt) * Math.cos(earthAngle)
-  )
-  return toDegrees(Math.asin(
-    ((EARTH_RADIUS_KM + satAlt) * Math.cos(earthAngle) - EARTH_RADIUS_KM) / slant
-  ))
+  return calculateLookAngles(observerLat, observerLon, satLat, satLon, satAlt).elevation
 }

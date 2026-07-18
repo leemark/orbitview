@@ -58,6 +58,29 @@ body {
   margin-left: auto;
 }
 
+.catalog-selector {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+#catalog-select {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 3px;
+  color: var(--color-text);
+  font-size: 10px;
+  padding: 3px 5px;
+  outline: none;
+}
+
+#catalog-select:focus { border-color: var(--color-accent); }
+#catalog-select:disabled { opacity: 0.6; }
+#catalog-select option { background: var(--bg-deep); }
+
 #map-container {
   flex: 1;
   position: relative;
@@ -108,6 +131,11 @@ body {
   color: var(--color-text-muted);
   z-index: 1000;
   flex-shrink: 0;
+}
+
+#prediction-note {
+  color: var(--color-accent);
+  white-space: nowrap;
 }
 
 .tooltip {
@@ -177,7 +205,9 @@ body {
 .info-row .label { color: var(--color-text-muted); font-size: 12px; }
 .info-row .value { font-size: 12px; }
 .info-row .mono { font-family: 'Courier New', monospace; }
-.age-warning { color: var(--color-danger); font-size: 11px; }
+.element-status { font-size: 11px; }
+.element-current { color: var(--color-success); }
+.element-stale { color: var(--color-danger); }
 .vis-yes { color: var(--color-success); font-size: 11px; }
 .vis-no  { color: var(--color-text-muted); font-size: 11px; }
 

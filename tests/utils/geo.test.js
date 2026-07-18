@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { toRadians, toDegrees, haversineDistance, calculateElevation } from '../../src/utils/geo.js'
+import {
+  toRadians,
+  toDegrees,
+  haversineDistance,
+  calculateElevation,
+  calculateLookAngles,
+} from '../../src/utils/geo.js'
 
 describe('toRadians / toDegrees', () => {
   it('converts 180° to π', () => expect(toRadians(180)).toBeCloseTo(Math.PI))
@@ -26,5 +32,15 @@ describe('calculateElevation', () => {
   it('returns negative for satellite below horizon', () => {
     const el = calculateElevation(0, 0, 89, 0, 400)
     expect(el).toBeLessThan(0)
+  })
+})
+
+describe('calculateLookAngles', () => {
+  it('returns WGS-84 elevation, azimuth, and range', () => {
+    const lookAngles = calculateLookAngles(0, 0, 0, 10, 400)
+
+    expect(lookAngles.elevation).toBeGreaterThan(0)
+    expect(lookAngles.azimuth).toBeCloseTo(90, 5)
+    expect(lookAngles.range).toBeGreaterThan(1000)
   })
 })

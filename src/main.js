@@ -2,18 +2,20 @@ import L from 'leaflet'
 import { initMap } from './map/mapManager.js'
 import { createSatelliteLayer } from './map/satelliteLayer.js'
 import { renderGroundTrack, clearGroundTrack } from './map/groundTrack.js'
-import { fetchTLEs, getCacheAge } from './data/tleLoader.js'
+import { fetchTLEs, getFeedStatus, summarizeElementAges } from './data/tleLoader.js'
 import { propagatePosition } from './engine/propagator.js'
 import { Clock } from './engine/clock.js'
 import { IntervalScheduler } from './engine/updateScheduler.js'
-import { formatTLEAge, formatDate } from './utils/format.js'
+import { formatTLEAge, formatElapsedTime, formatDate } from './utils/format.js'
 import { showInfoPanel, hideInfoPanel, updateInfoPanel } from './ui/infoPanel.js'
 import { createSearchBar, filterSatellites } from './ui/searchBar.js'
 import { createFilterPanel, applyFilters } from './ui/filterPanel.js'
 import { createTimeControls } from './ui/timeControls.js'
 import { getSatelliteStatus } from './ui/status.js'
 import { CATEGORIES } from './data/categories.js'
-import { calculateElevation } from './utils/geo.js'
+import { DEFAULT_CATALOG_ID } from './data/catalogs.js'
+import { calculateLookAngles } from './utils/geo.js'
+import { createCatalogSelector } from './ui/catalogSelector.js'
 
 const map = initMap('map')
 const clock = new Clock()
@@ -29,6 +31,7 @@ let timeControls = null
 let activeFilters = { categories: new Set(CATEGORIES), regimes: new Set(['LEO', 'MEO', 'GEO', 'HEO']) }
 let observer = null
 let observerMarker = null
+let catalogSelector = null
 
 const satCountEl = document.getElementById('sat-count')
 const simTimeEl = document.getElementById('sim-time')
@@ -58,12 +61,12 @@ function setObserver(lat, lon) {
 
 function getObserverData(sat) {
   if (!observer || !sat.position) return undefined
-  const el = calculateElevation(
+  const lookAngles = calculateLookAngles(
     observer.lat, observer.lon,
     sat.position.lat, sat.position.lon,
     sat.position.alt
   )
-  return el > 0 ? { elevation: el } : null
+  return lookAngles.elevation > 0 ? lookAngles : null
 }
 
 function handleSelect(sat) {
@@ -82,8 +85,52 @@ function handleSelect(sat) {
 function updateStatus() {
   const { label } = getSatelliteStatus(satellites, searchQuery, activeFilters)
   if (satCountEl.textContent !== label) satCountEl.textContent = label
-  const cacheAge = getCacheAge()
-  freshnessEl.textContent = cacheAge ? `TLE data: ${formatTLEAge(cacheAge)}` : ''
+  const feedStatus = getFeedStatus()
+  const elementAges = summarizeElementAges(satellites)
+  if (!feedStatus || !elementAges) {
+    freshnessEl.textContent = ''
+    return
+  }
+  freshnessEl.textContent =
+    `${feedStatus.source} · ${feedStatus.catalogLabel} · ` +
+    `checked ${formatElapsedTime(feedStatus.checkedAt)} · ` +
+    `elements median ${formatTLEAge(elementAges.medianEpoch)}, ` +
+    `oldest ${formatTLEAge(elementAges.oldestEpoch)}`
+  freshnessEl.title =
+    `${feedStatus.coverage}. Positions are SGP4 predictions from public orbital elements.`
+  satCountEl.title = `${feedStatus.catalogLabel}: ${feedStatus.coverage}`
+}
+
+function setLoadingStatus(status) {
+  if (status === 'fetching') satCountEl.textContent = 'Fetching orbital elements…'
+  if (status === 'parsing') satCountEl.textContent = 'Parsing orbital elements…'
+  if (status === 'cache') satCountEl.textContent = 'Loading catalog from cache…'
+}
+
+async function loadCatalog(catalogId) {
+  const previousSatellites = satellites
+  selectedSat = null
+  hideInfoPanel()
+  clearGroundTrack(map)
+  groundTrackUpdateScheduler.reset()
+  satellites = []
+  satLayer?.setSelected(null)
+  satLayer?.update([])
+  updateStatus()
+
+  try {
+    const loadedSatellites = await fetchTLEs(setLoadingStatus, catalogId)
+    satellites = loadedSatellites
+    lastPropagatedSimTime = null
+    positionUpdateScheduler.reset()
+    updateStatus()
+  } catch (err) {
+    satellites = previousSatellites
+    lastPropagatedSimTime = null
+    updateStatus()
+    console.error(err)
+    throw err
+  }
 }
 
 let lastRaf = performance.now()
@@ -172,11 +219,7 @@ function setupKeyboardShortcuts() {
 async function init() {
   satCountEl.textContent = 'Loading TLEs…'
   try {
-    satellites = await fetchTLEs((status) => {
-      if (status === 'fetching') satCountEl.textContent = 'Fetching TLEs…'
-      if (status === 'parsing') satCountEl.textContent = 'Parsing…'
-      if (status === 'cache')   satCountEl.textContent = 'Loading from cache…'
-    })
+    satellites = await fetchTLEs(setLoadingStatus, DEFAULT_CATALOG_ID)
 
     const tooltip = document.getElementById('tooltip')
 
@@ -191,6 +234,11 @@ async function init() {
         tooltip.classList.add('hidden')
       }
     })
+
+    catalogSelector = createCatalogSelector(
+      document.getElementById('catalog-container'),
+      loadCatalog
+    )
 
     // Request observer location (silently fails if denied)
     if (navigator.geolocation) {

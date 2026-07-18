@@ -1,13 +1,14 @@
 # OrbitView
 
-Real-time satellite tracker running entirely in the browser — no backend required.
+Browser-based satellite prediction map — no backend required.
 
 **[Live demo →](https://leemark.github.io/orbitview/)**
 
 ## Features
 
-- **Live satellite map** — 500+ satellites rendered as color-coded dots on a dark Leaflet map, updating in real time via SGP4 propagation
-- **Click to inspect** — select any satellite to see its name, NORAD ID, orbit type, lat/lon/altitude, velocity, and TLE data age
+- **Predicted satellite map** — satellites rendered as color-coded dots on a dark Leaflet map using SGP4 propagation
+- **Catalog selection** — choose a curated overview or explicit stations, visible, weather, navigation, active-sample, and Starlink-sample datasets
+- **Click to inspect** — see the satellite's position, velocity, orbital-element source, format, epoch, age, and freshness
 - **Ground track** — orbital path rendered for selected satellite (solid past, dashed future)
 - **Hover tooltips** — satellite name and altitude on mouseover
 - **Search** — filter satellites by name or NORAD ID
@@ -31,7 +32,7 @@ Real-time satellite tracker running entirely in the browser — no backend requi
 
 | Layer | Technology |
 |-------|-----------|
-| Bundler | Vite 5 |
+| Bundler | Vite 8 |
 | Language | Vanilla JS (ES modules) |
 | Map | Leaflet 1.9 + Canvas overlay |
 | Orbital math | satellite.js (SGP4/SDP4) |
@@ -41,13 +42,14 @@ Real-time satellite tracker running entirely in the browser — no backend requi
 
 ## Architecture
 
-OrbitView is fully client-side — no server, no API keys. Every satellite position is computed in the browser from publicly available TLE data.
+OrbitView is fully client-side — no server, no API keys. Every satellite position is an SGP4 prediction computed in the browser from publicly available TLE or OMM orbital elements; it is not live telemetry.
 
 ```
 src/
   main.js              # Entry point — animation loop, keyboard shortcuts, wiring
   data/
-    tleLoader.js       # Fetch TLE data, parse OMM records, localStorage cache
+    catalogs.js        # Explicit, bounded catalog definitions
+    tleLoader.js       # Fetch and parse OMM/TLE records, localStorage cache
     categories.js      # Satellite classification (name + NORAD ID patterns)
   engine/
     propagator.js      # satellite.js wrapper — SGP4 → lat/lon/alt/velocity
@@ -62,15 +64,15 @@ src/
     filterPanel.js     # Category + orbit regime toggles
     timeControls.js    # Play/pause, speed, reset buttons
   utils/
-    geo.js             # Haversine distance, elevation angle
+    geo.js             # Distance and WGS-84 observer look angles
     format.js          # Altitude, velocity, coordinate, date formatting
 ```
 
 **Data flow:**
-1. Fetch TLE data from [TLE API](https://tle.ivanstanojevic.me/) (CORS-friendly, paginated) — CelesTrak group queries as fallback
-2. Parse OMM records → `satellite.js` satrec objects
+1. Fetch the selected, explicitly labeled [CelesTrak](https://celestrak.org/) OMM catalog — a bounded TLE API sample is the overview fallback
+2. Parse OMM or TLE records → `satellite.js` satrec objects
 3. Cache in `localStorage` with 2-hour TTL
-4. Each animation frame: propagate all satrec objects to current sim time → lat/lon/alt
+4. On a bounded update interval: propagate satrec objects to current sim time → lat/lon/alt
 5. Render positions on Leaflet Canvas overlay
 
 ## Getting Started
@@ -99,7 +101,7 @@ Live at: `https://leemark.github.io/orbitview/`
 
 | Priority | Source | Notes |
 |----------|--------|-------|
-| Primary | [TLE API](https://tle.ivanstanojevic.me/api/tle/) | CORS-friendly, no auth |
-| Fallback | [CelesTrak](https://celestrak.org) | Small group queries (stations, visual, weather, GPS, Starlink) |
+| Primary | [CelesTrak](https://celestrak.org) | Selected OMM JSON group catalog |
+| Overview fallback | [TLE API](https://tle.ivanstanojevic.me/api/tle/) | CORS-friendly sample of up to 500 records |
 
-TLE data is cached in `localStorage` for 2 hours — SGP4 accuracy is sufficient for visualization with TLEs up to a few days old.
+Orbital data is cached in `localStorage` for 2 hours. The UI reports feed-check time separately from the median, oldest, and per-satellite element ages, and marks elements older than three days as stale.

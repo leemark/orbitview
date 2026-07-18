@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { formatAlt, formatVelocity, formatCoord, formatTLEAge } from '../../src/utils/format.js'
+import {
+  formatAlt,
+  formatVelocity,
+  formatCoord,
+  formatTLEAge,
+  formatElapsedTime,
+} from '../../src/utils/format.js'
 
 describe('formatAlt', () => {
   it('formats km with one decimal', () => expect(formatAlt(408.5)).toBe('408.5 km'))
@@ -25,5 +31,12 @@ describe('formatTLEAge', () => {
   it('shows days when 2+ days old', () => {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 3600 * 1000)
     expect(formatTLEAge(threeDaysAgo)).toBe('3d old')
+  })
+})
+
+describe('formatElapsedTime', () => {
+  it('uses elapsed-time wording for feed checks', () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000)
+    expect(formatElapsedTime(twoHoursAgo)).toBe('2h ago')
   })
 })

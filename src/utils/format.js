@@ -13,11 +13,15 @@ export function formatCoord(value, type) {
 }
 
 export function formatTLEAge(epoch) {
-  const ageMs = Date.now() - epoch.getTime()
+  const ageMs = Math.max(0, Date.now() - epoch.getTime())
   const hours = Math.floor(ageMs / (3600 * 1000))
   if (hours < 48) return `${hours}h old`
   const days = Math.floor(hours / 24)
   return `${days}d old`
+}
+
+export function formatElapsedTime(date) {
+  return formatTLEAge(date).replace(' old', ' ago')
 }
 
 export function formatDate(date) {

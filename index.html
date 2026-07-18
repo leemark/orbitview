@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OrbitView — Real-Time Satellite Tracker</title>
+  <title>OrbitView — Satellite Prediction Map</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><ellipse cx='32' cy='32' rx='27' ry='12' fill='none' stroke='%234a90d9' stroke-width='4' transform='rotate(-25 32 32)'/><circle cx='32' cy='32' r='8' fill='%234a90d9'/></svg>" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/src/styles/main.css" />
 </head>
@@ -12,6 +13,7 @@
     <header id="top-bar">
       <div class="brand">OrbitView</div>
       <div id="search-container"></div>
+      <div id="catalog-container"></div>
       <div id="filter-container"></div>
       <span id="sat-count">— satellites</span>
       <div id="time-controls-container"></div>
@@ -24,6 +26,7 @@
     <aside id="info-panel" class="hidden" aria-label="Satellite details"></aside>
 
     <footer id="bottom-bar">
+      <span id="prediction-note" title="Positions are predictions, not live telemetry">Predicted · SGP4</span>
       <span id="sim-time"></span>
       <span id="playback-speed"></span>
       <span id="data-freshness"></span>
