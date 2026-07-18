@@ -92,10 +92,12 @@ function updateStatus() {
     return
   }
   freshnessEl.textContent =
-    `Feed checked ${formatElapsedTime(feedStatus.checkedAt)} · ` +
+    `${feedStatus.source} · ${feedStatus.catalogLabel} · ` +
+    `checked ${formatElapsedTime(feedStatus.checkedAt)} · ` +
     `elements median ${formatTLEAge(elementAges.medianEpoch)}, ` +
     `oldest ${formatTLEAge(elementAges.oldestEpoch)}`
-  freshnessEl.title = `Orbital elements from ${feedStatus.source}`
+  freshnessEl.title =
+    `${feedStatus.coverage}. Positions are SGP4 predictions from public orbital elements.`
   satCountEl.title = `${feedStatus.catalogLabel}: ${feedStatus.coverage}`
 }
 

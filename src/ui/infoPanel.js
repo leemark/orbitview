@@ -1,4 +1,10 @@
-import { formatAlt, formatVelocity, formatCoord, formatTLEAge } from '../utils/format.js'
+import {
+  formatAlt,
+  formatVelocity,
+  formatCoord,
+  formatTLEAge,
+  formatDate,
+} from '../utils/format.js'
 import { getOrbitRegime } from '../data/categories.js'
 
 const panel = document.getElementById('info-panel')
@@ -30,7 +36,7 @@ function buildPanel(sat) {
       </div>
     </div>
     <div class="info-section">
-      <h3>Current Position</h3>
+      <h3>Predicted Position</h3>
       <div class="info-row">
         <span class="label">Latitude</span>
         <span class="value mono" data-field="latitude"></span>
@@ -49,11 +55,28 @@ function buildPanel(sat) {
       </div>
     </div>
     <div class="info-section">
+      <h3>Orbital Elements</h3>
       <div class="info-row">
-        <span class="label">TLE Age</span>
+        <span class="label">Source</span>
+        <span class="value" data-field="source"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">Catalog</span>
+        <span class="value" data-field="catalog"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">Format</span>
+        <span class="value mono" data-field="element-format"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">Epoch</span>
+        <span class="value mono" data-field="element-epoch"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">Element Age</span>
         <span class="value mono">
-          <span data-field="tle-age"></span>
-          <span class="age-warning hidden" data-field="tle-warning">⚠ Stale TLE</span>
+          <span data-field="element-age"></span>
+          <span class="element-status" data-field="element-status"></span>
         </span>
       </div>
     </div>
@@ -71,8 +94,12 @@ function buildPanel(sat) {
     longitude: panel.querySelector('[data-field="longitude"]'),
     altitude: panel.querySelector('[data-field="altitude"]'),
     velocity: panel.querySelector('[data-field="velocity"]'),
-    tleAge: panel.querySelector('[data-field="tle-age"]'),
-    tleWarning: panel.querySelector('[data-field="tle-warning"]'),
+    source: panel.querySelector('[data-field="source"]'),
+    catalog: panel.querySelector('[data-field="catalog"]'),
+    elementFormat: panel.querySelector('[data-field="element-format"]'),
+    elementEpoch: panel.querySelector('[data-field="element-epoch"]'),
+    elementAge: panel.querySelector('[data-field="element-age"]'),
+    elementStatus: panel.querySelector('[data-field="element-status"]'),
   }
   panelSatId = sat.noradId
 
@@ -97,11 +124,16 @@ function updatePanel(sat, position, observerData) {
   setText(panelRefs.longitude, formatCoord(position.lon, 'lon'))
   setText(panelRefs.altitude, formatAlt(position.alt))
   setText(panelRefs.velocity, formatVelocity(position.velocity))
-  setText(panelRefs.tleAge, formatTLEAge(sat.epoch))
-  panelRefs.tleWarning.classList.toggle(
-    'hidden',
-    (Date.now() - sat.epoch.getTime()) <= 3 * 24 * 3600 * 1000
-  )
+  setText(panelRefs.source, sat.dataSource ?? 'Unknown')
+  setText(panelRefs.catalog, sat.catalogLabel ?? 'Unknown')
+  setText(panelRefs.elementFormat, sat.elementFormat ?? 'Unknown')
+  setText(panelRefs.elementEpoch, formatDate(sat.epoch))
+  setText(panelRefs.elementAge, formatTLEAge(sat.epoch))
+  const hasStaleElements =
+    (Date.now() - sat.epoch.getTime()) > 3 * 24 * 3600 * 1000
+  setText(panelRefs.elementStatus, hasStaleElements ? ' · ⚠ Stale' : ' · Current')
+  panelRefs.elementStatus.className =
+    `element-status ${hasStaleElements ? 'element-stale' : 'element-current'}`
 
   const hasObserver = observerData !== undefined
   panelRefs.visibilityRow.classList.toggle('hidden', !hasObserver)

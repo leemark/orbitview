@@ -37,6 +37,9 @@ describe('showInfoPanel', () => {
       noradId: 25544,
       category: 'stations',
       epoch: new Date(),
+      dataSource: 'CelesTrak',
+      catalogLabel: 'Stations',
+      elementFormat: 'OMM',
     }
 
     showInfoPanel(
@@ -60,6 +63,30 @@ describe('showInfoPanel', () => {
     expect(panel.querySelector('[data-field="latitude"]').textContent).toBe('12.34°N')
     expect(panel.querySelector('[data-field="visibility"]').textContent)
       .toBe('✓ El 25.5° · Az 123.4° · 988 km')
+    expect(panel.querySelector('[data-field="source"]').textContent).toBe('CelesTrak')
+    expect(panel.querySelector('[data-field="catalog"]').textContent).toBe('Stations')
+    expect(panel.querySelector('[data-field="element-format"]').textContent).toBe('OMM')
+    expect(panel.querySelector('[data-field="element-status"]').textContent).toContain('Current')
+  })
+
+  it('flags orbital elements older than three days as stale', async () => {
+    const { showInfoPanel } = await import('../../src/ui/infoPanel.js')
+    showInfoPanel(
+      {
+        name: 'OLD SAT',
+        noradId: 123,
+        category: 'other',
+        epoch: new Date(Date.now() - 4 * 24 * 3600 * 1000),
+        dataSource: 'CelesTrak',
+        catalogLabel: 'Overview',
+        elementFormat: 'OMM',
+      },
+      { lat: 0, lon: 0, alt: 400, velocity: 7.7 }
+    )
+
+    const status = document.querySelector('[data-field="element-status"]')
+    expect(status.textContent).toContain('Stale')
+    expect(status.classList.contains('element-stale')).toBe(true)
   })
 
   it('binds the close action once per panel lifecycle', async () => {

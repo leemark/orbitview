@@ -133,6 +133,11 @@ body {
   flex-shrink: 0;
 }
 
+#prediction-note {
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
 .tooltip {
   position: fixed;
   background: var(--bg-panel);
@@ -200,7 +205,9 @@ body {
 .info-row .label { color: var(--color-text-muted); font-size: 12px; }
 .info-row .value { font-size: 12px; }
 .info-row .mono { font-family: 'Courier New', monospace; }
-.age-warning { color: var(--color-danger); font-size: 11px; }
+.element-status { font-size: 11px; }
+.element-current { color: var(--color-success); }
+.element-stale { color: var(--color-danger); }
 .vis-yes { color: var(--color-success); font-size: 11px; }
 .vis-no  { color: var(--color-text-muted); font-size: 11px; }
 
