@@ -16,6 +16,7 @@ import { CATEGORIES } from './data/categories.js'
 import { DEFAULT_CATALOG_ID } from './data/catalogs.js'
 import { calculateLookAngles } from './utils/geo.js'
 import { createCatalogSelector } from './ui/catalogSelector.js'
+import { updateSatelliteTrail } from './engine/trailHistory.js'
 
 const map = initMap('map')
 const clock = new Clock()
@@ -148,6 +149,12 @@ function animate(now) {
   ) {
     for (const sat of satellites) {
       sat.position = propagatePosition(sat.satrec, simTime)
+      sat.trail = updateSatelliteTrail(
+        sat.trail,
+        sat.satrec,
+        sat.position,
+        simTime
+      )
     }
     lastPropagatedSimTime = simTimestamp
     updateStatus()
