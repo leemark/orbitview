@@ -1,11 +1,19 @@
 import L from 'leaflet'
 import { CATEGORY_COLORS } from '../data/categories.js'
-import { getWrappedXPositions } from './worldWrap.js'
+import {
+  getWrappedXPositions,
+  unwrapWorldXPositions,
+} from './worldWrap.js'
 
 const DOT_RADIUS = 2.5
 const SELECTED_RING_RADIUS = 6
 const HIT_RADIUS = 8 // px for click/hover detection
 const RENDER_MARGIN = 10
+const TRAIL_BANDS = [
+  { from: 0, to: 0.4, opacity: 0.05 },
+  { from: 0.4, to: 0.72, opacity: 0.11 },
+  { from: 0.72, to: 1, opacity: 0.24 },
+]
 
 export function createSatelliteLayer(map, onSelect, onHover) {
   let satellites = []
@@ -45,10 +53,68 @@ export function createSatelliteLayer(map, onSelect, onHover) {
     ctx.globalAlpha = 1
   }
 
+  function drawTrailBand(points, xOffset, color, band, isSelected) {
+    const segmentCount = points.length - 1
+    const startSegment = Math.floor(segmentCount * band.from)
+    const endSegment = Math.max(
+      startSegment + 1,
+      Math.ceil(segmentCount * band.to)
+    )
+
+    ctx.beginPath()
+    ctx.moveTo(points[startSegment].x + xOffset, points[startSegment].y)
+    for (let segment = startSegment; segment < endSegment; segment++) {
+      ctx.lineTo(points[segment + 1].x + xOffset, points[segment + 1].y)
+    }
+    ctx.strokeStyle = color
+    ctx.lineWidth = isSelected ? 1.6 : 1
+    ctx.globalAlpha = Math.min(1, band.opacity * (isSelected ? 1.8 : 1))
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+
+  function drawTrail(sat, color, isSelected, worldWidth) {
+    if (!sat.trail || sat.trail.length < 2 || !sat.position) return
+
+    const trailPoints = [
+      ...sat.trail,
+      { lat: sat.position.lat, lon: sat.position.lon },
+    ].map(point => projectToCanvas(point.lat, point.lon))
+
+    const currentPoint = trailPoints.at(-1)
+    const continuousXs = unwrapWorldXPositions(
+      trailPoints.map(point => point.x),
+      worldWidth
+    )
+    const continuousPoints = trailPoints.map((point, index) => ({
+      x: continuousXs[index],
+      y: point.y,
+    }))
+    const wrappedCurrentXs = getWrappedXPositions(
+      currentPoint.x,
+      worldWidth,
+      canvas.width,
+      RENDER_MARGIN
+    )
+
+    for (const wrappedCurrentX of wrappedCurrentXs) {
+      const xOffset = wrappedCurrentX - currentPoint.x
+      for (const band of TRAIL_BANDS) {
+        drawTrailBand(continuousPoints, xOffset, color, band, isSelected)
+      }
+    }
+  }
+
   function render() {
     if (!ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     const worldWidth = getWorldWidth()
+
+    for (const sat of satellites) {
+      if (!sat.position) continue
+      const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS.other
+      drawTrail(sat, color, sat.noradId === selectedId, worldWidth)
+    }
 
     for (const sat of satellites) {
       if (!sat.position) continue
