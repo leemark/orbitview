@@ -11,19 +11,39 @@ export function createSatrecFromOmm(ommRecord) {
 // Returns { lat, lon, alt, velocity } or null if propagation fails.
 // lat/lon in degrees, alt in km, velocity in km/s.
 export function propagatePosition(satrec, date) {
-  if (satrec.error !== 0) return null
+  if (!satrec || !(date instanceof Date) || !Number.isFinite(date.getTime())) return null
 
-  const pv = satellite.propagate(satrec, date)
-  if (!pv || !pv.position || typeof pv.position !== 'object') return null
+  try {
+    // satellite.js clears satrec.error during each propagation. Calling it lets
+    // a later valid date recover after a previous date produced an error.
+    const pv = satellite.propagate(satrec, date)
+    if (!pv || !pv.position || !pv.velocity || typeof pv.position !== 'object' || typeof pv.velocity !== 'object') return null
+    if (
+      satrec.error !== 0 ||
+      !Number.isFinite(pv.position.x) ||
+      !Number.isFinite(pv.position.y) ||
+      !Number.isFinite(pv.position.z) ||
+      !Number.isFinite(pv.velocity.x) ||
+      !Number.isFinite(pv.velocity.y) ||
+      !Number.isFinite(pv.velocity.z)
+    ) return null
 
-  const gmst = satellite.gstime(date)
-  const geo = satellite.eciToGeodetic(pv.position, gmst)
+    const gmst = satellite.gstime(date)
+    const geo = satellite.eciToGeodetic(pv.position, gmst)
+    const lat = satellite.degreesLat(geo.latitude)
+    const lon = satellite.degreesLong(geo.longitude)
+    const alt = geo.height
+    const velocity = Math.sqrt(pv.velocity.x ** 2 + pv.velocity.y ** 2 + pv.velocity.z ** 2)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(alt) || !Number.isFinite(velocity)) return null
 
-  return {
-    lat: satellite.degreesLat(geo.latitude),
-    lon: satellite.degreesLong(geo.longitude),
-    alt: geo.height,
-    velocity: Math.sqrt(pv.velocity.x ** 2 + pv.velocity.y ** 2 + pv.velocity.z ** 2),
+    return {
+      lat,
+      lon,
+      alt,
+      velocity,
+    }
+  } catch {
+    return null
   }
 }
 

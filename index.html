@@ -3,36 +3,74 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0c1420" />
+  <meta name="description" content="Explore satellites above Earth. Find spacecraft, follow their predicted orbits, and see how the sky changes over time." />
   <title>OrbitView — Satellite Prediction Map</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><ellipse cx='32' cy='32' rx='27' ry='12' fill='none' stroke='%234a90d9' stroke-width='4' transform='rotate(-25 32 32)'/><circle cx='32' cy='32' r='8' fill='%234a90d9'/></svg>" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/src/styles/main.css" />
 </head>
 <body>
   <div id="app">
     <header id="top-bar">
-      <div class="brand">OrbitView</div>
-      <div id="search-container"></div>
-      <div id="catalog-container"></div>
-      <div id="filter-container"></div>
-      <span id="sat-count">— satellites</span>
-      <div id="time-controls-container"></div>
+      <a class="brand" href="./" aria-label="OrbitView home">
+        <svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="20" rx="18" ry="8" transform="rotate(-35 20 20)"/><circle cx="20" cy="20" r="5"/><circle class="orbit-dot" cx="33" cy="10" r="3"/></svg>
+        <span>Orbit<span class="brand-light">View</span><small>A little perspective from above.</small></span>
+      </a>
+      <div class="header-actions">
+        <span class="prediction-badge"><span class="status-dot"></span>Predicted positions</span>
+        <button id="help-button" class="quiet-button" aria-haspopup="dialog"><span aria-hidden="true">?</span> <span>How to explore</span></button>
+      </div>
     </header>
-
-    <main id="map-container">
-      <div id="map"></div>
+    <main id="workspace">
+      <section id="explorer" aria-label="Explore satellites">
+        <div class="explorer-intro"><p class="eyebrow">EARTH, IN MOTION</p><h1>What’s orbiting above?</h1><p>Find a satellite. Follow its journey.</p></div>
+        <div class="explorer-controls">
+          <div id="catalog-container"></div>
+          <div id="search-container"></div>
+          <div id="filter-container"></div>
+        </div>
+        <div class="results-heading"><span id="sat-count" role="status">Loading satellites…</span><button id="toggle-results" class="text-button" aria-controls="satellite-results" aria-expanded="false">Browse list</button></div>
+        <div id="satellite-results" aria-label="Satellite results"></div>
+        <p class="explorer-tip">Select a satellite to see its orbit and details.</p>
+      </section>
+      <section id="map-container" aria-label="Satellite map">
+        <div id="map" aria-label="Interactive satellite map. Use arrow keys to pan and plus or minus to zoom."></div>
+        <div id="map-caption"><span class="status-dot"></span><span id="map-mode">EARTH / NOW</span></div>
+        <div class="map-actions">
+          <button id="world-view" class="map-button" title="Reset map view" aria-label="Reset map view"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></button>
+          <button id="locate-me" class="map-button" title="Use my location" aria-label="Use my location"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg></button>
+        </div>
+        <p id="location-status" class="map-notice hidden" role="status"></p>
+        <div id="load-notice" class="load-notice hidden" role="status"><div><strong id="load-notice-title"></strong><p id="load-notice-text"></p></div><button id="retry-load" class="quiet-button">Try again</button></div>
+        <aside id="info-panel" class="hidden" aria-label="Satellite details"></aside>
+        <div class="time-dock" aria-label="Simulation time">
+          <div class="time-readout"><span id="time-mode">NOW</span><time id="sim-time"></time><span id="playback-speed" class="sr-only"></span></div>
+          <div id="time-controls-container"></div>
+        </div>
+      </section>
     </main>
-
-    <aside id="info-panel" class="hidden" aria-label="Satellite details"></aside>
-
     <footer id="bottom-bar">
-      <span id="prediction-note" title="Positions are predictions, not live telemetry">Predicted · SGP4</span>
-      <span id="sim-time"></span>
-      <span id="playback-speed"></span>
-      <span id="data-freshness"></span>
+      <span id="prediction-note">Orbit predictions · SGP4</span>
+      <button id="data-details-button" class="text-button" aria-haspopup="dialog"><span id="data-freshness">Connecting to orbital data…</span><span aria-hidden="true"> ↗</span></button>
     </footer>
   </div>
-
+  <dialog id="help-dialog" aria-labelledby="help-title">
+    <form method="dialog"><button class="dialog-close" aria-label="Close guide">×</button></form>
+    <p class="eyebrow">YOUR WINDOW INTO ORBIT</p><h2 id="help-title">Start with a little curiosity.</h2>
+    <div class="guide-step"><span>01</span><div><h3>Find something interesting</h3><p>Search by name or NORAD ID, browse the list, or select a dot on the map. Catalogs choose the data; filters narrow what you see.</p></div></div>
+    <div class="guide-step"><span>02</span><div><h3>Follow its path</h3><p>The solid line is the past half of an orbit; the dashed line is the future half. Drag to explore, scroll or pinch to zoom.</p></div></div>
+    <div class="guide-step"><span>03</span><div><h3>Let time move</h3><p>Pause for a closer look or speed up the simulation. Select Now to return to the present at normal speed.</p></div></div>
+    <p class="guide-note">Positions are calculated from public orbital elements, not live telemetry. Older elements and times far from their epoch are less reliable. “Above horizon” does not guarantee a satellite is visible to the eye.</p>
+    <div class="shortcuts"><span><kbd>/</kbd> Search</span><span><kbd>Space</kbd> Play / pause</span><span><kbd>Esc</kbd> Close details</span></div>
+  </dialog>
+  <dialog id="data-dialog" aria-labelledby="data-title">
+    <form method="dialog"><button class="dialog-close" aria-label="Close data details">×</button></form>
+    <p class="eyebrow">BEHIND THE MAP</p><h2 id="data-title">About these predictions</h2>
+    <p id="feed-details">Orbital data has not loaded yet.</p>
+    <p>Each position is calculated in your browser using SGP4. Feed check time and orbital-element age are different: a recently checked feed can still contain older elements.</p>
+    <p>Catalogs are curated or explicitly limited samples. The map does not show every object in orbit.</p>
+    <p class="source-links"><a href="https://celestrak.org/" target="_blank" rel="noopener noreferrer">CelesTrak ↗</a><a href="https://tle.ivanstanojevic.me/" target="_blank" rel="noopener noreferrer">TLE API ↗</a></p>
+  </dialog>
   <div id="tooltip" class="tooltip hidden" role="tooltip"></div>
 
   <script type="module" src="/src/main.js"></script>

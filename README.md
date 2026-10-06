@@ -11,11 +11,13 @@ Browser-based satellite prediction map — no backend required.
 - **Click to inspect** — see the satellite's position, velocity, orbital-element source, format, epoch, age, and freshness
 - **Ground track** — orbital path rendered for selected satellite (solid past, dashed future)
 - **Hover tooltips** — satellite name and altitude on mouseover
-- **Search** — filter satellites by name or NORAD ID
+- **Satellite browser** — search by name or NORAD ID, select a result by touch or keyboard, and center its predicted position on the map
 - **Category filters** — toggle Stations, Weather, Navigation, Starlink, Comms, Science, Debris, Other
-- **Orbit regime filters** — toggle LEO / MEO / GEO / HEO
-- **Time controls** — play/pause, speed multiplier (1× / 10× / 100× / 1000×), reset to now
-- **Observer location** — grant browser location permission to see which satellites are currently overhead
+- **Altitude filters** — toggle LEO / MEO / GEO / HEO altitude bands, with explicit pressed states and a Show all reset
+- **Time controls** — play/pause, speed multiplier (1× / 10× / 100× / 1000×), explicit Now/Paused/Simulation state; Now returns to the present at 1×
+- **Observer location** — opt in with the location button to check a selected satellite's elevation above your horizon
+- **Responsive layout** — a satellite sidebar on desktop and a collapsible results list on phones, with scrollable details and an exploration guide
+- **Feed recovery** — loading and error feedback, retry, bounded network requests, corrupted-cache recovery, and explicit partial-feed coverage
 - **Keyboard shortcuts** — see table below
 
 ## Keyboard Shortcuts
@@ -27,6 +29,11 @@ Browser-based satellite prediction map — no backend required.
 | `-` | Decrease simulation speed |
 | `Escape` | Deselect satellite |
 | `/` | Focus search bar |
+| `↓` / `Enter` in search | Focus the first satellite result |
+| `↑` / `↓` in results | Move between satellites |
+| `Enter` / `Space` on a result | Select the satellite |
+
+Shortcuts respect focused form controls. When the map has focus, arrow keys pan and `+` / `-` zoom it.
 
 ## Tech Stack
 
@@ -55,12 +62,13 @@ src/
     propagator.js      # satellite.js wrapper — SGP4 → lat/lon/alt/velocity
     clock.js           # Simulation clock with speed multiplier
   map/
-    mapManager.js      # Leaflet init (CartoDB dark tiles)
+    mapManager.js      # Leaflet init (OpenStreetMap tiles, styled dark)
     satelliteLayer.js  # Canvas overlay — dot rendering + click/hover hit-testing
     groundTrack.js     # Orbital ground track polylines
   ui/
     infoPanel.js       # Slide-out satellite detail panel
     searchBar.js       # Search input + satellite filtering
+    satelliteList.js   # Accessible, paginated satellite results
     filterPanel.js     # Category + orbit regime toggles
     timeControls.js    # Play/pause, speed, reset buttons
   utils/
@@ -104,4 +112,6 @@ Live at: `https://leemark.github.io/orbitview/`
 | Primary | [CelesTrak](https://celestrak.org) | Selected OMM JSON group catalog |
 | Overview fallback | [TLE API](https://tle.ivanstanojevic.me/api/tle/) | CORS-friendly sample of up to 500 records |
 
-Orbital data is cached in `localStorage` for 2 hours. The UI reports feed-check time separately from the median, oldest, and per-satellite element ages, and marks elements older than three days as stale.
+Orbital data is cached in `localStorage` for 2 hours. The data-details dialog reports feed-check time separately from median and oldest element ages; each satellite's details include its source and epoch. Elements older than three days are marked stale. OMM epochs without an offset are treated as UTC, and TLE ages use the epoch encoded in the elements.
+
+Map tiles use [OpenStreetMap's standard service](https://operations.osmfoundation.org/policies/tiles/) with visible attribution and normal browser caching. There is no tile prefetch or offline download. Satellite positions and observer look angles are computed locally; location is requested only after the location button is selected.

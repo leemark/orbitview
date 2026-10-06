@@ -4,6 +4,7 @@ import { DEFAULT_CATALOG_ID, getCatalog } from './catalogs.js'
 
 export const CACHE_KEY = 'orbitview_orbital_data_v2'
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
+const FETCH_TIMEOUT_MS = 10_000
 let currentFeedStatus = null
 
 // CelesTrak: use smaller group queries instead of GROUP=active (avoids bandwidth limits).
@@ -40,9 +41,60 @@ function normalizeTLEApiRecord(rec) {
   }
 }
 
+function parseEpoch(value) {
+  if (value instanceof Date) return new Date(value.getTime())
+  if (typeof value !== 'string') return new Date(value)
+
+  const text = value.trim()
+  if (!text) return new Date(NaN)
+
+  // CelesTrak OMM EPOCH values are UTC when no offset is supplied. Appending
+  // Z avoids interpreting them in the browser's local timezone.
+  return new Date(/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(text) ? text : `${text}Z`)
+}
+
+function epochFromTleSatrec(satrec, fallback) {
+  const jd = Number(satrec?.jdsatepoch)
+  const jdFraction = Number(satrec?.jdsatepochF)
+  if (Number.isFinite(jd)) {
+    const fullJd = jd + (Number.isFinite(jdFraction) ? jdFraction : 0)
+    return new Date((fullJd - 2440587.5) * 86400000)
+  }
+  return parseEpoch(fallback)
+}
+
+async function fetchJsonWithTimeout(url) {
+  const controller = new AbortController()
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error(`Request timed out after ${FETCH_TIMEOUT_MS / 1000} seconds`))
+    }, FETCH_TIMEOUT_MS)
+  })
+  try {
+    const response = await Promise.race([
+      fetch(url, { signal: controller.signal }),
+      timeout,
+    ])
+    if (!response.ok) return { response, data: null }
+    const data = await Promise.race([response.json(), timeout])
+    return { response, data }
+  } catch (err) {
+    if (err?.name === 'AbortError' || controller.signal.aborted) {
+      throw new Error(`Request timed out after ${FETCH_TIMEOUT_MS / 1000} seconds`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export function parseTLEData(rawRecords, metadata = {}) {
+  if (!Array.isArray(rawRecords)) return []
   const results = []
   for (const rec of rawRecords) {
+    if (!rec || typeof rec !== 'object' || typeof rec.OBJECT_NAME !== 'string' || !rec.OBJECT_NAME.trim()) continue
     const line1 = rec.TLE_LINE1
     const line2 = rec.TLE_LINE2
     const format = line1 && line2 ? 'TLE' : 'OMM'
@@ -61,7 +113,9 @@ export function parseTLEData(rawRecords, metadata = {}) {
     if (!Number.isFinite(satnum)) continue
 
     const noradId = parseInt(rec.NORAD_CAT_ID, 10)
-    const epoch = new Date(rec.EPOCH)
+    const epoch = format === 'TLE'
+      ? epochFromTleSatrec(satrec, rec.EPOCH)
+      : parseEpoch(rec.EPOCH)
     if (!Number.isFinite(noradId) || Number.isNaN(epoch.getTime())) continue
 
     results.push({
@@ -91,13 +145,12 @@ function parseOrThrow(rawRecords, metadata) {
 async function fetchTLEApi(numPages = 5) {
   const allRaw = []
   for (let page = 1; page <= numPages; page++) {
-    const res = await fetch(
+    const { response: res, data: json } = await fetchJsonWithTimeout(
       `https://tle.ivanstanojevic.me/api/tle/?page=${page}&page-size=100`
     )
     if (!res.ok) throw new Error(`TLE API HTTP ${res.status}`)
-    const json = await res.json()
     const members = json.member ?? []
-    allRaw.push(...members.map(normalizeTLEApiRecord))
+    allRaw.push(...members.filter(rec => rec && typeof rec === 'object').map(normalizeTLEApiRecord))
     if (members.length < 100) break // reached last page
   }
   if (allRaw.length === 0) throw new Error('TLE API returned no records')
@@ -109,24 +162,32 @@ async function fetchTLEApi(numPages = 5) {
 async function fetchCelesTrakGroups(groups, limit = Infinity) {
   const allRaw = []
   const seen = new Set()
+  const failedGroups = []
   for (const group of groups) {
     try {
-      const res = await fetch(`${CELESTRAK_BASE}?GROUP=${group}&FORMAT=json`)
-      if (!res.ok) continue
-      const data = await res.json()
+      const { response: res, data } = await fetchJsonWithTimeout(`${CELESTRAK_BASE}?GROUP=${group}&FORMAT=json`)
+      if (!res.ok) {
+        failedGroups.push(group)
+        continue
+      }
+      if (!Array.isArray(data)) {
+        failedGroups.push(group)
+        continue
+      }
       for (const rec of data) {
+        if (!rec || typeof rec !== 'object' || typeof rec.OBJECT_NAME !== 'string' || !rec.OBJECT_NAME.trim()) continue
         if (!seen.has(rec.NORAD_CAT_ID)) {
           seen.add(rec.NORAD_CAT_ID)
           allRaw.push(rec)
-          if (allRaw.length >= limit) return allRaw
+          if (allRaw.length >= limit) return { records: allRaw, failedGroups }
         }
       }
     } catch {
-      // skip failed group, try next
+      failedGroups.push(group)
     }
   }
   if (allRaw.length === 0) throw new Error('All CelesTrak groups failed')
-  return allRaw
+  return { records: allRaw, failedGroups }
 }
 
 function getCatalogCacheKey(catalogId) {
@@ -164,26 +225,38 @@ export async function fetchTLEs(onProgress, catalogId = DEFAULT_CATALOG_ID) {
 
   const cached = loadFromCache(catalogId)
   if (cached) {
-    currentFeedStatus = {
-      checkedAt: new Date(cached.timestamp),
-      source: cached.metadata.source ?? 'Unknown',
-      catalogLabel: cached.metadata.catalogLabel ?? catalog.label,
-      coverage: cached.metadata.coverage ?? catalog.description,
+    try {
+      const parsed = parseOrThrow(cached.data, cached.metadata)
+      currentFeedStatus = {
+        checkedAt: new Date(cached.timestamp),
+        source: cached.metadata.source ?? 'Unknown',
+        catalogLabel: cached.metadata.catalogLabel ?? catalog.label,
+        coverage: cached.metadata.coverage ?? catalog.description,
+        partial: Boolean(cached.metadata.partial),
+      }
+      onProgress?.('cache')
+      return parsed
+    } catch (err) {
+      console.warn('Cached orbital data is unusable, fetching a fresh feed:', err.message)
     }
-    onProgress?.('cache')
-    return parseOrThrow(cached.data, cached.metadata)
   }
 
   onProgress?.('fetching')
 
   // Primary: the explicitly selected CelesTrak OMM catalog.
   try {
-    const raw = await fetchCelesTrakGroups(catalog.groups, catalog.limit)
+    const fetched = await fetchCelesTrakGroups(catalog.groups, catalog.limit)
+    const raw = fetched.records
+    const partial = fetched.failedGroups.length > 0
+    const coverage = partial
+      ? `${catalog.description} (Partial: unavailable groups ${fetched.failedGroups.join(', ')})`
+      : catalog.description
     const metadata = {
       source: 'CelesTrak',
       catalogId,
       catalogLabel: catalog.label,
-      coverage: catalog.description,
+      coverage,
+      partial,
     }
     const parsed = parseOrThrow(raw, metadata)
     saveToCache(catalogId, raw, metadata)
@@ -205,6 +278,7 @@ export async function fetchTLEs(onProgress, catalogId = DEFAULT_CATALOG_ID) {
       catalogId,
       catalogLabel: 'Overview fallback sample',
       coverage: 'Up to 500 records from the TLE API',
+      partial: false,
     }
     const parsed = parseOrThrow(raw, metadata)
     saveToCache(catalogId, raw, metadata)
@@ -228,6 +302,7 @@ export function getFeedStatus() {
       source: metadata.source ?? 'Unknown',
       catalogLabel: metadata.catalogLabel ?? 'Overview',
       coverage: metadata.coverage ?? '',
+      partial: Boolean(metadata.partial),
     }
   } catch {
     return null

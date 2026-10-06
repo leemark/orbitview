@@ -5,11 +5,17 @@ describe('classifySatellite', () => {
   it('classifies ISS as stations', () => {
     expect(classifySatellite({ name: 'ISS (ZARYA)', noradId: 25544 })).toBe('stations')
   })
+  it('does not classify unrelated names containing ISS as stations', () => {
+    expect(classifySatellite({ name: 'SWISSCUBE', noradId: 99901 })).toBe('other')
+  })
   it('classifies Tiangong as stations', () => {
     expect(classifySatellite({ name: 'CSS (TIANHE)', noradId: 48274 })).toBe('stations')
   })
   it('classifies Starlink as starlink', () => {
     expect(classifySatellite({ name: 'STARLINK-1234', noradId: 44235 })).toBe('starlink')
+  })
+  it('classifies debris Starlink objects as debris', () => {
+    expect(classifySatellite({ name: 'STARLINK-1007 DEB', noradId: 44235 })).toBe('debris')
   })
   it('classifies NOAA as weather', () => {
     expect(classifySatellite({ name: 'NOAA 19', noradId: 33591 })).toBe('weather')

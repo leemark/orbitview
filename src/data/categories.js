@@ -1,14 +1,14 @@
 export const CATEGORIES = ['stations', 'weather', 'navigation', 'starlink', 'communications', 'science', 'debris', 'other']
 
 export const CATEGORY_COLORS = {
-  stations:       '#ffffff',
-  weather:        '#4caf50',
-  navigation:     '#4a90d9',
-  starlink:       '#9c27b0',
-  communications: '#ff9800',
-  science:        '#00bcd4',
-  debris:         '#555e6e',
-  other:          '#4a90d9',
+  stations:       '#f1f5f9',
+  weather:        '#91d3a1',
+  navigation:     '#78b8f0',
+  starlink:       '#cd94ee',
+  communications: '#f0bd78',
+  science:        '#69d5cf',
+  debris:         '#97a3b5',
+  other:          '#a6bbc9',
 }
 
 export const CATEGORY_LABELS = {
@@ -25,13 +25,13 @@ export const CATEGORY_LABELS = {
 export function classifySatellite({ name, noradId }) {
   const n = name.toUpperCase()
 
-  if (noradId === 25544 || noradId === 48274 || n.includes('ISS') || n.includes('TIANHE') || n.includes('CSS (')) {
+  if (noradId === 25544 || noradId === 48274 || /\bISS\b/.test(n) || n.includes('TIANHE') || n.includes('CSS (')) {
     return 'stations'
   }
-  if (n.includes('STARLINK')) return 'starlink'
   if (n.includes('DEB') || n.includes('DEBRIS') || n.includes('R/B') || n.includes('ROCKET BODY')) {
     return 'debris'
   }
+  if (n.includes('STARLINK')) return 'starlink'
   if (
     n.includes('NOAA') || n.includes('GOES') || n.includes('METEOSAT') ||
     n.includes('METEOR-') || n.includes('FENGYUN') || n.includes('HIMAWARI') ||

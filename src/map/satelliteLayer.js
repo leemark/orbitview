@@ -20,11 +20,21 @@ export function createSatelliteLayer(map, onSelect, onHover) {
   let selectedId = null
   let hoveredId = null
   let canvas, ctx
+  let width = 0
+  let height = 0
+  let devicePixelRatio = 1
+  let dragging = false
 
   function resize() {
     const size = map.getSize()
-    canvas.width = size.x
-    canvas.height = size.y
+    width = size.x
+    height = size.y
+    devicePixelRatio = globalThis.devicePixelRatio || 1
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+    canvas.width = Math.round(width * devicePixelRatio)
+    canvas.height = Math.round(height * devicePixelRatio)
+    ctx?.setTransform?.(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
   }
 
   function projectToCanvas(lat, lon) {
@@ -33,7 +43,7 @@ export function createSatelliteLayer(map, onSelect, onHover) {
   }
 
   function getWorldWidth() {
-    return map.getPixelWorldBounds(map.getZoom())?.getSize().x ?? 0
+    return map.getPixelWorldBounds?.(map.getZoom())?.getSize().x ?? 0
   }
 
   function drawSatellite(x, y, color, isSelected, isHovered) {
@@ -93,7 +103,7 @@ export function createSatelliteLayer(map, onSelect, onHover) {
     const wrappedCurrentXs = getWrappedXPositions(
       currentPoint.x,
       worldWidth,
-      canvas.width,
+      width,
       RENDER_MARGIN
     )
 
@@ -107,7 +117,7 @@ export function createSatelliteLayer(map, onSelect, onHover) {
 
   function render() {
     if (!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.clearRect(0, 0, width, height)
     const worldWidth = getWorldWidth()
 
     for (const sat of satellites) {
@@ -119,7 +129,7 @@ export function createSatelliteLayer(map, onSelect, onHover) {
     for (const sat of satellites) {
       if (!sat.position) continue
       const { x: baseX, y } = projectToCanvas(sat.position.lat, sat.position.lon)
-      if (y < -RENDER_MARGIN || y > canvas.height + RENDER_MARGIN) continue
+      if (y < -RENDER_MARGIN || y > height + RENDER_MARGIN) continue
 
       const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS.other
       const isSelected = sat.noradId === selectedId
@@ -127,7 +137,7 @@ export function createSatelliteLayer(map, onSelect, onHover) {
       const wrappedXs = getWrappedXPositions(
         baseX,
         worldWidth,
-        canvas.width,
+        width,
         RENDER_MARGIN
       )
 
@@ -148,7 +158,7 @@ export function createSatelliteLayer(map, onSelect, onHover) {
       const wrappedXs = getWrappedXPositions(
         baseX,
         worldWidth,
-        canvas.width,
+        width,
         HIT_RADIUS
       )
 
@@ -163,41 +173,97 @@ export function createSatelliteLayer(map, onSelect, onHover) {
     return closest
   }
 
+  function setCursor(value) {
+    const mapContainer = map.getContainer()
+    if (mapContainer?.style) mapContainer.style.cursor = value
+  }
+
+  function clearHover(clientX, clientY) {
+    if (hoveredId === null) return
+    hoveredId = null
+    setCursor('')
+    onHover?.(null, clientX, clientY)
+    render()
+  }
+
+  function getClientPosition(e) {
+    const originalEvent = e?.originalEvent
+    if (originalEvent && Number.isFinite(originalEvent.clientX) && Number.isFinite(originalEvent.clientY)) {
+      return { x: originalEvent.clientX, y: originalEvent.clientY }
+    }
+    const rect = map.getContainer().getBoundingClientRect?.()
+    return {
+      x: (rect?.left ?? 0) + (e?.containerPoint?.x ?? 0),
+      y: (rect?.top ?? 0) + (e?.containerPoint?.y ?? 0),
+    }
+  }
+
   function handleClick(e) {
-    const rect = canvas.getBoundingClientRect()
-    const sat = findSatAt(e.clientX - rect.left, e.clientY - rect.top)
+    if (dragging || !e.containerPoint) return
+    const sat = findSatAt(e.containerPoint.x, e.containerPoint.y)
     selectedId = sat ? sat.noradId : null
     onSelect?.(sat ?? null)
     render()
   }
 
   function handleMouseMove(e) {
-    const rect = canvas.getBoundingClientRect()
-    const sat = findSatAt(e.clientX - rect.left, e.clientY - rect.top)
+    if (dragging || !e.containerPoint) return
+    const sat = findSatAt(e.containerPoint.x, e.containerPoint.y)
     const newId = sat ? sat.noradId : null
     if (newId !== hoveredId) {
       hoveredId = newId
-      canvas.style.cursor = sat ? 'pointer' : ''
-      onHover?.(sat ?? null, e.clientX, e.clientY)
+      setCursor(sat ? 'pointer' : '')
+      const client = getClientPosition(e)
+      onHover?.(sat ?? null, client.x, client.y)
       render()
     }
   }
 
+  function handleMouseOut(e) {
+    const client = getClientPosition(e)
+    clearHover(client.x, client.y)
+  }
+
+  function handleDragStart() {
+    dragging = true
+    clearHover()
+  }
+
+  function handleDragEnd() {
+    dragging = false
+  }
+
+  function handleResize() {
+    resize()
+    render()
+  }
+
   canvas = document.createElement('canvas')
   canvas.className = 'satellite-layer'
-  canvas.style.cssText = 'position:absolute;top:0;left:0;z-index:400;pointer-events:auto;'
+  canvas.style.cssText = 'position:absolute;top:0;left:0;z-index:400;pointer-events:none;'
   map.getContainer().appendChild(canvas)
   ctx = canvas.getContext('2d')
   resize()
 
-  map.on('resize', resize)
+  map.on('resize', handleResize)
   map.on('move zoom', render)
-  canvas.addEventListener('click', handleClick)
-  canvas.addEventListener('mousemove', handleMouseMove)
+  map.on('click', handleClick)
+  map.on('mousemove', handleMouseMove)
+  map.on('mouseout', handleMouseOut)
+  map.on('dragstart', handleDragStart)
+  map.on('dragend', handleDragEnd)
+  map.on('movestart', () => clearHover())
 
   return {
     update(newSatellites) {
-      satellites = newSatellites
+      satellites = newSatellites ?? []
+      if (selectedId !== null && !satellites.some(sat => sat.noradId === selectedId)) {
+        selectedId = null
+        onSelect?.(null)
+      }
+      if (hoveredId !== null && !satellites.some(sat => sat.noradId === hoveredId)) {
+        clearHover()
+      }
       render()
     },
     setSelected(noradId) {

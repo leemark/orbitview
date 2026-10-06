@@ -5,7 +5,7 @@ import {
   formatTLEAge,
   formatDate,
 } from '../utils/format.js'
-import { getOrbitRegime } from '../data/categories.js'
+import { CATEGORY_LABELS, getOrbitRegime } from '../data/categories.js'
 
 const panel = document.getElementById('info-panel')
 let panelRefs = null
@@ -14,7 +14,7 @@ let panelSatId = null
 function buildPanel(sat) {
   panel.innerHTML = `
     <div class="info-header">
-      <h2 class="sat-name"></h2>
+      <div><p class="info-kicker">SATELLITE DETAILS</p><h2 class="sat-name"></h2></div>
       <button id="close-panel" aria-label="Close panel">✕</button>
     </div>
     <div class="info-section">
@@ -27,7 +27,7 @@ function buildPanel(sat) {
         <span class="value" data-field="category"></span>
       </div>
       <div class="info-row">
-        <span class="label">Orbit</span>
+        <span class="label">Altitude band</span>
         <span class="value" data-field="regime"></span>
       </div>
       <div class="info-row hidden" data-row="visibility">
@@ -37,6 +37,10 @@ function buildPanel(sat) {
     </div>
     <div class="info-section">
       <h3>Predicted Position</h3>
+      <div class="position-metrics">
+        <div class="metric"><span class="label">Altitude</span><span class="value mono" data-field="altitude"></span></div>
+        <div class="metric"><span class="label">Velocity</span><span class="value mono" data-field="velocity"></span></div>
+      </div>
       <div class="info-row">
         <span class="label">Latitude</span>
         <span class="value mono" data-field="latitude"></span>
@@ -45,17 +49,11 @@ function buildPanel(sat) {
         <span class="label">Longitude</span>
         <span class="value mono" data-field="longitude"></span>
       </div>
-      <div class="info-row">
-        <span class="label">Altitude</span>
-        <span class="value mono" data-field="altitude"></span>
-      </div>
-      <div class="info-row">
-        <span class="label">Velocity</span>
-        <span class="value mono" data-field="velocity"></span>
-      </div>
+      <div class="track-key" aria-label="Ground track legend"><span><i></i>Past half-orbit</span><span><i class="future"></i>Future half-orbit</span></div>
+      <p class="observer-help">Use the location button to check your horizon.</p>
     </div>
+    <details class="info-disclosure"><summary>Orbital data &amp; source</summary>
     <div class="info-section">
-      <h3>Orbital Elements</h3>
       <div class="info-row">
         <span class="label">Source</span>
         <span class="value" data-field="source"></span>
@@ -80,6 +78,7 @@ function buildPanel(sat) {
         </span>
       </div>
     </div>
+    </details>
   `
 
   panelRefs = {
@@ -118,7 +117,7 @@ function updatePanel(sat, position, observerData) {
 
   setText(panelRefs.name, sat.name)
   setText(panelRefs.noradId, String(sat.noradId))
-  setText(panelRefs.category, sat.category)
+  setText(panelRefs.category, CATEGORY_LABELS[sat.category] ?? sat.category)
   setText(panelRefs.regime, getOrbitRegime(position.alt))
   setText(panelRefs.latitude, formatCoord(position.lat, 'lat'))
   setText(panelRefs.longitude, formatCoord(position.lon, 'lon'))
@@ -136,6 +135,7 @@ function updatePanel(sat, position, observerData) {
     `element-status ${hasStaleElements ? 'element-stale' : 'element-current'}`
 
   const hasObserver = observerData !== undefined
+  panel.querySelector('.observer-help').classList.toggle('hidden', hasObserver)
   panelRefs.visibilityRow.classList.toggle('hidden', !hasObserver)
   if (hasObserver) {
     const isVisible = Boolean(observerData)

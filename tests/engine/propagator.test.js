@@ -30,8 +30,20 @@ describe('propagatePosition', () => {
 
   it('returns null when satrec has error flag set', () => {
     const satrec = createSatrec(TLE1, TLE2)
-    satrec.error = 1
+    satrec.ecco = 2
     expect(propagatePosition(satrec, new Date())).toBeNull()
+  })
+
+  it('returns null for an invalid date and recovers on the next valid date', () => {
+    const satrec = createSatrec(TLE1, TLE2)
+    expect(propagatePosition(satrec, new Date('invalid'))).toBeNull()
+    expect(propagatePosition(satrec, new Date('2026-03-26T12:00:00Z'))).not.toBeNull()
+  })
+
+  it('recovers after a propagation error at a date where the orbit has decayed', () => {
+    const satrec = createSatrec(TLE1, TLE2)
+    expect(propagatePosition(satrec, new Date('2090-01-01T00:00:00Z'))).toBeNull()
+    expect(propagatePosition(satrec, new Date('2026-03-26T12:00:00Z'))).not.toBeNull()
   })
 
   it('two propagations at different times yield different positions', () => {
